@@ -1,0 +1,71 @@
+---
+title: "Ranking method simulation study"
+author: "Robin Blythe"
+format: docx
+editor: visual
+---
+
+## Background
+
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking, especially when some patient information is important for better outcomes but not used in risk stratification, for example indigenous status.
+
+A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This appears to be somewhat self-defeating; if only 15 alerts will be tolerated, but the 16th alert is a false negative, this can be severely consequential for patients and hospital safety more generally.
+
+This study contrasts the two approaches - if we impose thresholds or sort patients into risk categories, what is the opportunity cost compared to ranking patients by their predicted risk?
+
+## Study outline
+
+1.  Determine a use case. In this example, we can choose elective surgery waiting lists.
+2.  Obtain costs and outcomes for each state: True positive, true negative, false positive, false negative.
+    1.  E.g., for an elective surgery waiting list, we may identify patients who are at risk of urgent admission within the next 30 days due to delays in care.
+3.  Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC.
+4.  Simulate an underlying patient population based on an underlying prevalence of the event
+
+## Methods
+
+### Set up experiment
+
+```{r}
+# Hypothetical model and event rate
+auc = 0.65
+p0 = 0.1
+
+pmsamp <- pmsampsize::pmsampsize(
+  type = "b",
+  prevalence = p0, 
+  cstatistic = auc,
+  parameters = 1)
+
+sample_size <- pmsamp$sample_size
+min_events <- ceiling(pmsamp$events)
+
+sample_size
+min_events
+```
+
+### Generate simulated data
+
+```{r}
+set.seed(888)
+
+sample_pop <- predictNMB::get_sample(
+  auc = auc, 
+  n_samples = sample_size, 
+  prevalence = p0, 
+  min_events = min_events)
+
+fit <- glm(actual ~ x, data = sample_pop, family = binomial())
+
+sample_pop$predicted <- predict(fit, type = "response")
+
+```
+
+### Assign costs and outcomes
+
+#### Ideas:
+
+1.  What if we try for a surveillance example too - e.g., inpatient deterioration?
+2.  Can we add a staff cost for false positives/false negatives?
+3.  How do we incorporate estimates of staff time in the ranking system?
+4.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max)
+5.  Repeat the analysis for a miscalibrated model
