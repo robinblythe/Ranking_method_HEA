@@ -8,9 +8,9 @@ bibliography: references.bib
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk do not utilise the information being produced.
 
-A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This appears to be somewhat self-defeating; if only 15 alerts will be tolerated, but the 16th alert is a false negative, this can be severely consequential for patients and hospital safety more generally.
+A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This approach can be considered in addition to other, ROC or value-based methods. [@Parsons2023]
 
 This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?
 
@@ -18,26 +18,26 @@ This study contrasts the two approaches - if we randomly sample from a study pop
 
 1.  Determine a use case.
     i.  In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to additional costs and worse outcomes.
-2.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
-3.  Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC and underlying prevalence.
-4.  Simulate an underlying patient population using the minimum required sample size.
-5.  Identify a threshold based on the entire study population and number needed to treat.
+2.  Simulate a hypothetical clinical prediction model with a given AUC and underlying prevalence.
+3.  Simulate an underlying patient population using the minimum required sample size.
+4.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
+5.  Identify a selection of thresholds based on the study population used to generate the model.
 6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.
 7.  Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.
-8.  Compare approaches across variety of AUCs and prevalence.
+8.  Compare NMB across variety of AUCs and prevalence for both ranking and threshold-based methods.
 
 ## Methods
 
-Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to the attending doctor; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.
+Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to an outreach team; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.
 
-Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment.
+Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
 
 ### Set up experiment
 
 ```{r}
-# Disable scientific notation
 options(scipen = 999, digits = 3)
 library(predictNMB)
+library(pROC)
 
 # Hypothetical model specs and event rate
 auc = 0.85
@@ -109,14 +109,33 @@ fx_nmb <- get_nmb_sampler(
 
 ```{r}
 fx_nmb_sampler <- get_nmb_sampler(
-  
+ outcome_cost = function() rnorm(1, 14134, 686),
+ wtp = wtp,
+ qalys_lost = function() rnorm(1, 0.03, 0.04),
+ high_risk_group_treatment_cost = function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19,
+ high_risk_group_treatment_effect = function() rnorm(1, 0.910, 0.036)
 )
+```
+
+#### Derive cutpoints
+
+```{r}
+nmb_simulation <- do_nmb_sim(
+  sample_size = sample_size,
+  n_sims = 500,
+  n_valid = 10000,
+  sim_auc = auc,
+  event_rate = p0,
+  fx_nmb_training = fx_nmb,
+  fx_nmb_evaluation = fx_nmb_sampler
+)
+summary(nmb_simulation)
+autoplot(nmb_simulation, what = "inb", inb_ref_col = "none") + theme_sim()
+autoplot(nmb_simulation, what = "cutpoints") + theme_sim()
 ```
 
 #### Ideas:
 
-1.  What if we try for a surveillance example too - e.g., inpatient deterioration?
-2.  Can we add a staff cost for false positives/false negatives?
-3.  How do we incorporate estimates of staff time in the ranking system?
-4.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max)
-5.  Repeat the analysis for a miscalibrated model
+1.  What if we try for a non-hospital example - elective surgery wait lists?
+2.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max) - see Romero-Brufau approach
+3.  Repeat the analysis for a miscalibrated model?

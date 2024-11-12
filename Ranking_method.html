@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.6.33">
+<meta name="generator" content="quarto-1.5.57">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -84,10 +84,10 @@ div.csl-indent {
 <script src="Ranking_method_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="Ranking_method_files/libs/quarto-html/anchor.min.js"></script>
 <link href="Ranking_method_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="Ranking_method_files/libs/quarto-html/quarto-syntax-highlighting-07ba0ad10f5680c660e360ac31d2f3b6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="Ranking_method_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="Ranking_method_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="Ranking_method_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="Ranking_method_files/libs/bootstrap/bootstrap-b8d30c7eeda119d43de224048e70de8f.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="Ranking_method_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
@@ -125,8 +125,8 @@ div.csl-indent {
 
 <section id="background" class="level2">
 <h2 class="anchored" data-anchor-id="background">Background</h2>
-<p>This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first.</p>
-<p>A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This appears to be somewhat self-defeating; if only 15 alerts will be tolerated, but the 16th alert is a false negative, this can be severely consequential for patients and hospital safety more generally.</p>
+<p>This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk do not utilise the information being produced.</p>
+<p>A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This approach can be considered in addition to other, ROC or value-based methods. <span class="citation" data-cites="Parsons2023">(<a href="#ref-Parsons2023" role="doc-biblioref">Parsons et al. 2023</a>)</span></p>
 <p>This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?</p>
 </section>
 <section id="study-outline" class="level2">
@@ -136,10 +136,10 @@ div.csl-indent {
 <ol type="i">
 <li>In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to additional costs and worse outcomes.</li>
 </ol></li>
-<li>Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.</li>
 <li>Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC and underlying prevalence.</li>
 <li>Simulate an underlying patient population using the minimum required sample size.</li>
-<li>Identify a threshold based on the entire study population and number needed to treat.</li>
+<li>Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.</li>
+<li>Identify a selection of thresholds based on the study population used to generate the model.</li>
 <li>Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.</li>
 <li>Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.</li>
 <li>Compare approaches across variety of AUCs and prevalence.</li>
@@ -147,30 +147,32 @@ div.csl-indent {
 </section>
 <section id="methods" class="level2">
 <h2 class="anchored" data-anchor-id="methods">Methods</h2>
-<p>Let’s assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to the attending doctor; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.</p>
-<p>Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment.</p>
+<p>Let’s assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to an outreach team; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.</p>
+<p>Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.</p>
 <section id="set-up-experiment" class="level3">
 <h3 class="anchored" data-anchor-id="set-up-experiment">Set up experiment</h3>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Disable scientific notation</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">scipen =</span> <span class="dv">999</span>, <span class="at">digits =</span> <span class="dv">3</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Hypothetical model specs and event rate</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>auc <span class="ot">=</span> <span class="fl">0.85</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>params <span class="ot">=</span> <span class="dv">30</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">=</span> <span class="fl">0.01</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain minimum sample size/events</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>pmsamp <span class="ot">&lt;-</span> pmsampsize<span class="sc">::</span><span class="fu">pmsampsize</span>(</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"b"</span>,</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">cstatistic =</span> auc,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">parameters =</span> params)</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>sample_size <span class="ot">&lt;-</span> pmsamp<span class="sc">$</span>sample_size</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>min_events <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(pmsamp<span class="sc">$</span>events)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(predictNMB)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Hypothetical model specs and event rate</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>auc <span class="ot">=</span> <span class="fl">0.85</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>params <span class="ot">=</span> <span class="dv">30</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">=</span> <span class="fl">0.01</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>wtp <span class="ot">=</span> <span class="fu">ceiling</span>(<span class="dv">28033</span><span class="sc">*</span>(<span class="fl">1.03</span>)<span class="sc">^</span>(<span class="dv">2024</span> <span class="sc">-</span> <span class="dv">2018</span>))</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain minimum sample size/events</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>pmsamp <span class="ot">&lt;-</span> pmsampsize<span class="sc">::</span><span class="fu">pmsampsize</span>(</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"b"</span>,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">cstatistic =</span> auc,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">parameters =</span> params)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>sample_size <span class="ot">&lt;-</span> pmsamp<span class="sc">$</span>sample_size</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>min_events <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(pmsamp<span class="sc">$</span>events)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>For a model with 30 parameters, an AUC of 0.85 and a prevalence of 0.01, we need a sample size of 13216 with 133 events. We can use these requirements to generate a hypothetical study population.</p>
+<p>For a model with 30 parameters, an AUC of 0.85 and a prevalence of 0.01, we need a sample size of 13,216 with 133 events. We can use these requirements to generate a hypothetical study population.</p>
 </section>
 <section id="generate-simulated-dataset" class="level3">
 <h3 class="anchored" data-anchor-id="generate-simulated-dataset">Generate simulated dataset</h3>
@@ -178,7 +180,7 @@ div.csl-indent {
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">888</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use model specs and minimum sample size to generate a sample population</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sample_pop <span class="ot">&lt;-</span> predictNMB<span class="sc">::</span><span class="fu">get_sample</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sample_pop <span class="ot">&lt;-</span> <span class="fu">get_sample</span>(</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">auc =</span> auc, </span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_samples =</span> sample_size, </span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
@@ -197,9 +199,89 @@ div.csl-indent {
 <section id="parameters" class="level4">
 <h4 class="anchored" data-anchor-id="parameters">Parameters</h4>
 <ul>
-<li><p>Additional costs due to deterioration ~𝒩(14134, 686) <span class="citation" data-cites="Curtis2021">(<a href="#ref-Curtis2021" role="doc-biblioref">Curtis et al. 2021</a>)</span></p></li>
-<li><p>Effect of alert on ICU admission ~Beta(</p></li>
+<li>Additional costs due to deterioration ~𝒩(14134, 686) <span class="citation" data-cites="Curtis2021">(<a href="#ref-Curtis2021" role="doc-biblioref">Curtis et al. 2021</a>)</span></li>
+<li>Effect of alert on ICU admission ~𝒩(0.910, 0.036) <span class="citation" data-cites="Escobar2020">(<a href="#ref-Escobar2020" role="doc-biblioref">Escobar et al. 2020</a>)</span></li>
+<li>QALYs lost from deterioration episode ~𝒩(0.03, 0.04) <span class="citation" data-cites="Holmes2024">(<a href="#ref-Holmes2024" role="doc-biblioref">Holmes et al. 2024</a>)</span></li>
+<li>Duration of clinical assessment (using MET call time) ~𝚪(110.314, 0.172) <span class="citation" data-cites="Bellomo2003">(<a href="#ref-Bellomo2003" role="doc-biblioref">Bellomo et al. 2003</a>)</span>
+<ul>
+<li>Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior <span class="citation" data-cites="white2023">(<a href="#ref-white2023" role="doc-biblioref">White and Blythe 2023</a>)</span></li>
+</ul></li>
+<li>Cost of clinical time per minute based on ICU outreach registrar, the resident medical officer, and the patient’s nurse <span class="citation" data-cites="Bohingamu2024">(<a href="#ref-Bohingamu2024" role="doc-biblioref">Bohingamu Mudiyanselage et al. 2024</a>)</span>
+<ul>
+<li>ICU outreach registrar hourly: 69.91/60 * (1.03)^(2024 - 2016) = 1.48</li>
+<li>Resident medical officer hourly: 50.79/60 * (1.03)^(2024 - 2016) = 1.07</li>
+<li>Nurse hourly: 30.47 * (1.03)^(2024 - 2016) = 0.64</li>
+<li>Altogether: $3.19/minute (fixed)</li>
+</ul></li>
 </ul>
+</section>
+<section id="fixed" class="level4">
+<h4 class="anchored" data-anchor-id="fixed">Fixed:</h4>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>fx_nmb <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">outcome_cost =</span> <span class="dv">14134</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">wtp =</span> wtp,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">qalys_lost =</span> <span class="fl">0.03</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_cost =</span> <span class="fl">3.19</span> <span class="sc">*</span> <span class="dv">19</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_effect =</span> <span class="fl">0.910</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="stochastic" class="level4">
+<h4 class="anchored" data-anchor-id="stochastic">Stochastic:</h4>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>fx_nmb_sampler <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a> <span class="at">outcome_cost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">14134</span>, <span class="dv">686</span>),</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a> <span class="at">wtp =</span> wtp,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a> <span class="at">qalys_lost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.03</span>, <span class="fl">0.04</span>),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_cost =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="at">shape =</span> <span class="fl">110.314</span>, <span class="at">scale =</span> <span class="fl">0.172</span>) <span class="sc">*</span> <span class="fl">3.19</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_effect =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.910</span>, <span class="fl">0.036</span>)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="derive-cutpoints" class="level4">
+<h4 class="anchored" data-anchor-id="derive-cutpoints">Derive cutpoints</h4>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>nmb_simulation <span class="ot">&lt;-</span> <span class="fu">do_nmb_sim</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_size =</span> sample_size,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_sims =</span> <span class="dv">500</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_valid =</span> <span class="dv">10000</span>,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">sim_auc =</span> auc,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">event_rate =</span> p0,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_training =</span> fx_nmb,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_evaluation =</span> fx_nmb_sampler</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(nmb_simulation)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 8 × 3
+  method           median `95% CI`      
+  &lt;chr&gt;             &lt;dbl&gt; &lt;chr&gt;         
+1 all               -73.3 -90.3 to -57.3
+2 cost minimising   -53.0 -72 to -37.8  
+3 index of union    -59.7 -83.2 to -41.4
+4 none             -151.  -202.3 to -111
+5 prod sens spec    -59.3 -82.1 to -41.8
+6 roc01             -59.3 -81.5 to -42.6
+7 value optimising  -53.6 -72.5 to -38.9
+8 youden            -59.8 -84 to -41.8  </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"inb"</span>, <span class="at">inb_ref_col =</span> <span class="st">"none"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="Ranking_method_files/figure-html/unnamed-chunk-5-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"cutpoints"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="Ranking_method_files/figure-html/unnamed-chunk-5-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
 </section>
 <section id="ideas" class="level4">
 <h4 class="anchored" data-anchor-id="ideas">Ideas:</h4>
@@ -216,8 +298,26 @@ div.csl-indent {
 </section>
 
 <div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
+<div id="ref-Bellomo2003" class="csl-entry" role="listitem">
+Bellomo, Rinaldo, Donna Goldsmith, Shigehiko Uchino, Jonathan Buckmaster, Graeme K Hart, Helen Opdam, William Silvester, Laurie Doolan, and Geoffrey Gutteridge. 2003. <span>“A Prospective Before<span>-</span>and<span>-</span>After Trial of a Medical Emergency Team.”</span> <em>Medical Journal of Australia</em> 179 (6): 283–87. <a href="https://doi.org/10.5694/j.1326-5377.2003.tb05548.x">https://doi.org/10.5694/j.1326-5377.2003.tb05548.x</a>.
+</div>
+<div id="ref-Bohingamu2024" class="csl-entry" role="listitem">
+Bohingamu Mudiyanselage, Shalika, Julie Considine, Alison M. Hutchinson, Imogen Mitchell, Mohammadreza Mohebbi, Jennifer J. Watts, and Tracey K. Bucknall. 2024. <span>“An Economic Evaluation of the Prioritising Responses Of Nurses To Deteriorating Patient Observations (PRONTO) Clinical Trial.”</span> <em>Resuscitation</em> 201 (August): 110272. <a href="https://doi.org/10.1016/j.resuscitation.2024.110272">https://doi.org/10.1016/j.resuscitation.2024.110272</a>.
+</div>
 <div id="ref-Curtis2021" class="csl-entry" role="listitem">
 Curtis, Kate, Prabhu Sivabalan, David S. Bedford, Julie Considine, Alfa D’Amato, Nada Shepherd, Tiana Elphick, Ramon Z. Shaban, and Margaret Fry. 2021. <span>“Treatments Costs Associated with Inpatient Clinical Deterioration.”</span> <em>Resuscitation</em> 166 (September): 49–54. <a href="https://doi.org/10.1016/j.resuscitation.2021.07.022">https://doi.org/10.1016/j.resuscitation.2021.07.022</a>.
+</div>
+<div id="ref-Escobar2020" class="csl-entry" role="listitem">
+Escobar, Gabriel J., Vincent X. Liu, Alejandro Schuler, Brian Lawson, John D. Greene, and Patricia Kipnis. 2020. <span>“Automated Identification of Adults at Risk for In-Hospital Clinical Deterioration.”</span> <em>New England Journal of Medicine</em> 383 (20): 1951–60. <a href="https://doi.org/10.1056/nejmsa2001090">https://doi.org/10.1056/nejmsa2001090</a>.
+</div>
+<div id="ref-Holmes2024" class="csl-entry" role="listitem">
+Holmes, Emily, Huw Lloyd Williams, Dyfrig Hughes, Elke Naujokat, Bernd Duller, and Christian P. Subbe. 2024. <span>“A Model-Based Cost-Utility Analysis of an Automated Notification System for Deteriorating Patients on General Wards.”</span> Edited by Dominic Luke Thorrington. <em>PLOS ONE</em> 19 (5): e0301643. <a href="https://doi.org/10.1371/journal.pone.0301643">https://doi.org/10.1371/journal.pone.0301643</a>.
+</div>
+<div id="ref-Parsons2023" class="csl-entry" role="listitem">
+Parsons, Rex, Robin Blythe, Susanna M Cramb, and Steven M McPhail. 2023. <span>“Integrating Economic Considerations into Cutpoint Selection May Help Align Clinical Decision Support Toward Value-Based Healthcare.”</span> <em>Journal of the American Medical Informatics Association</em> 30 (6): 1103–13. <a href="https://doi.org/10.1093/jamia/ocad042">https://doi.org/10.1093/jamia/ocad042</a>.
+</div>
+<div id="ref-white2023" class="csl-entry" role="listitem">
+White, Nicole, and Robin Blythe. 2023. <span>“ShinyPrior: A Tool for Estimating Probability Distributions Using Published Evidence.”</span> <a href="http://dx.doi.org/10.31219/osf.io/zf62e">http://dx.doi.org/10.31219/osf.io/zf62e</a>.
 </div>
 </div></section></div></main>
 <!-- /main column -->
