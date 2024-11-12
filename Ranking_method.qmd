@@ -136,6 +136,7 @@ autoplot(nmb_simulation, what = "cutpoints") + theme_sim()
 
 #### Ideas:
 
-1.  What if we try for a non-hospital example - elective surgery wait lists?
-2.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max) - see Romero-Brufau approach
-3.  Repeat the analysis for a miscalibrated model?
+1.  Could plot X = number of patients seen, Y = NMB, with a line for each approach. NMB would probably be highest for ranking early on, coming equal with other methods over time. This could then be calculated as a table with cost savings for different limits on X (based on clinicians' willingness to respond to alerts).
+2.  What if we try for a non-hospital example - elective surgery wait lists?
+3.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max) - see Romero-Brufau approach
+4.  Repeat the analysis for a miscalibrated model?
