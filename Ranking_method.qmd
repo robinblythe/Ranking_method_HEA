@@ -1,66 +1,117 @@
 ---
 title: "Ranking method simulation study"
 author: "Robin Blythe"
-format: docx
+format: html
 editor: visual
+bibliography: references.bib
 ---
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking, especially when some patient information is important for better outcomes but not used in risk stratification, for example indigenous status.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first.
 
 A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This appears to be somewhat self-defeating; if only 15 alerts will be tolerated, but the 16th alert is a false negative, this can be severely consequential for patients and hospital safety more generally.
 
-This study contrasts the two approaches - if we impose thresholds or sort patients into risk categories, what is the opportunity cost compared to ranking patients by their predicted risk?
+This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?
 
 ## Study outline
 
-1.  Determine a use case. In this example, we can choose elective surgery waiting lists.
-2.  Obtain costs and outcomes for each state: True positive, true negative, false positive, false negative.
-    1.  E.g., for an elective surgery waiting list, we may identify patients who are at risk of urgent admission within the next 30 days due to delays in care.
-3.  Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC.
-4.  Simulate an underlying patient population based on an underlying prevalence of the event
+1.  Determine a use case.
+    i.  In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to additional costs and worse outcomes.
+2.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
+3.  Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC and underlying prevalence.
+4.  Simulate an underlying patient population using the minimum required sample size.
+5.  Identify a threshold based on the entire study population and number needed to treat.
+6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.
+7.  Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.
+8.  Compare approaches across variety of AUCs and prevalence.
 
 ## Methods
+
+Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to the attending doctor; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.
+
+Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment.
 
 ### Set up experiment
 
 ```{r}
-# Hypothetical model and event rate
-auc = 0.65
-p0 = 0.1
+# Disable scientific notation
+options(scipen = 999, digits = 3)
+library(predictNMB)
 
+# Hypothetical model specs and event rate
+auc = 0.85
+params = 30
+p0 = 0.01
+wtp = ceiling(28033*(1.03)^(2024 - 2018))
+
+# Obtain minimum sample size/events
 pmsamp <- pmsampsize::pmsampsize(
   type = "b",
   prevalence = p0, 
   cstatistic = auc,
-  parameters = 1)
+  parameters = params)
 
 sample_size <- pmsamp$sample_size
 min_events <- ceiling(pmsamp$events)
-
-sample_size
-min_events
 ```
 
-### Generate simulated data
+For a model with `r params` parameters, an AUC of `r auc` and a prevalence of `r p0`, we need a sample size of `r format(sample_size, big.mark = ",")` with `r min_events` events. We can use these requirements to generate a hypothetical study population.
+
+### Generate simulated dataset
 
 ```{r}
 set.seed(888)
 
-sample_pop <- predictNMB::get_sample(
+# Use model specs and minimum sample size to generate a sample population
+sample_pop <- get_sample(
   auc = auc, 
   n_samples = sample_size, 
   prevalence = p0, 
   min_events = min_events)
 
-fit <- glm(actual ~ x, data = sample_pop, family = binomial())
-
+# Obtain predicted probabilities
+fit <- glm(actual ~ x, 
+           data = sample_pop, 
+           family = binomial()
+           )
 sample_pop$predicted <- predict(fit, type = "response")
-
 ```
 
-### Assign costs and outcomes
+### Assign costs and outcomes to 2 x 2 table
+
+#### Parameters
+
+-   Additional costs due to deterioration \~𝒩(14134, 686) [@Curtis2021]
+-   Effect of alert on ICU admission \~𝒩(0.910, 0.036) [@Escobar2020]
+-   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
+-   Duration of clinical assessment (using MET call time) \~𝚪(110.314, 0.172) [@Bellomo2003]
+    -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
+-   Cost of clinical time per minute based on ICU outreach registrar, the resident medical officer, and the patient's nurse [@Bohingamu2024]
+    -   ICU outreach registrar hourly: 69.91/60 \* (1.03)\^(2024 - 2016) = 1.48
+    -   Resident medical officer hourly: 50.79/60 \* (1.03)\^(2024 - 2016) = 1.07
+    -   Nurse hourly: 30.47 \* (1.03)\^(2024 - 2016) = 0.64
+    -   Altogether: \$3.19/minute (fixed)
+
+#### Fixed:
+
+```{r}
+fx_nmb <- get_nmb_sampler(
+  outcome_cost = 14134,
+  wtp = wtp,
+  qalys_lost = 0.03,
+  high_risk_group_treatment_cost = 3.19 * 19,
+  high_risk_group_treatment_effect = 0.910
+)
+```
+
+#### Stochastic:
+
+```{r}
+fx_nmb_sampler <- get_nmb_sampler(
+  
+)
+```
 
 #### Ideas:
 
