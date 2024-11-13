@@ -125,8 +125,8 @@ div.csl-indent {
 
 <section id="background" class="level2">
 <h2 class="anchored" data-anchor-id="background">Background</h2>
-<p>This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk do not utilise the information being produced.</p>
-<p>A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This approach can be considered in addition to other, ROC or value-based methods. <span class="citation" data-cites="Parsons2023">(<a href="#ref-Parsons2023" role="doc-biblioref">Parsons et al. 2023</a>)</span></p>
+<p>This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions.</p>
+<p>A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate, using the positive predictive value (PPV) to determine number needed to evaluate (NNE). For example, a model with a PPV of 0.1 corresponds to a rate of 1 positive per 10 alerts, or a NNE of 10. This approach can be considered in addition to other, ROC or value-based methods. <span class="citation" data-cites="Parsons2023">(<a href="#ref-Parsons2023" role="doc-biblioref">Parsons et al. 2023</a>)</span></p>
 <p>This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?</p>
 </section>
 <section id="study-outline" class="level2">
@@ -136,13 +136,13 @@ div.csl-indent {
 <ol type="i">
 <li>In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to additional costs and worse outcomes.</li>
 </ol></li>
-<li>Simulate a hypothetical, well-calibrated clinical prediction model with a given AUC and underlying prevalence.</li>
+<li>Simulate a hypothetical clinical prediction model with a given AUC and underlying prevalence.</li>
 <li>Simulate an underlying patient population using the minimum required sample size.</li>
 <li>Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.</li>
 <li>Identify a selection of thresholds based on the study population used to generate the model.</li>
 <li>Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.</li>
 <li>Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.</li>
-<li>Compare approaches across variety of AUCs and prevalence.</li>
+<li>Compare NMB across variety of AUCs and prevalence for both ranking and threshold-based methods.</li>
 </ol>
 </section>
 <section id="methods" class="level2">
@@ -152,46 +152,57 @@ div.csl-indent {
 <section id="set-up-experiment" class="level3">
 <h3 class="anchored" data-anchor-id="set-up-experiment">Set up experiment</h3>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Disable scientific notation</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">scipen =</span> <span class="dv">999</span>, <span class="at">digits =</span> <span class="dv">3</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(predictNMB)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Hypothetical model specs and event rate</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>auc <span class="ot">=</span> <span class="fl">0.85</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>params <span class="ot">=</span> <span class="dv">30</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">=</span> <span class="fl">0.01</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>wtp <span class="ot">=</span> <span class="fu">ceiling</span>(<span class="dv">28033</span><span class="sc">*</span>(<span class="fl">1.03</span>)<span class="sc">^</span>(<span class="dv">2024</span> <span class="sc">-</span> <span class="dv">2018</span>))</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain minimum sample size/events</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>pmsamp <span class="ot">&lt;-</span> pmsampsize<span class="sc">::</span><span class="fu">pmsampsize</span>(</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"b"</span>,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">cstatistic =</span> auc,</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">parameters =</span> params)</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>sample_size <span class="ot">&lt;-</span> pmsamp<span class="sc">$</span>sample_size</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>min_events <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(pmsamp<span class="sc">$</span>events)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">scipen =</span> <span class="dv">999</span>, <span class="at">digits =</span> <span class="dv">3</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(predictNMB)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(pROC)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Type 'citation("pROC")' for a citation.</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'pROC'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following objects are masked from 'package:stats':
+
+    cov, smooth, var</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Hypothetical model specs and event rate</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>auc <span class="ot">=</span> <span class="fl">0.85</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>params <span class="ot">=</span> <span class="dv">30</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">=</span> <span class="fl">0.01</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>wtp <span class="ot">=</span> <span class="fu">ceiling</span>(<span class="dv">28033</span><span class="sc">*</span>(<span class="fl">1.03</span>)<span class="sc">^</span>(<span class="dv">2024</span> <span class="sc">-</span> <span class="dv">2018</span>))</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain minimum sample size/events</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>pmsamp <span class="ot">&lt;-</span> pmsampsize<span class="sc">::</span><span class="fu">pmsampsize</span>(</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"b"</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">cstatistic =</span> auc,</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">parameters =</span> params)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>sample_size <span class="ot">&lt;-</span> pmsamp<span class="sc">$</span>sample_size</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>min_events <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(pmsamp<span class="sc">$</span>events)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>For a model with 30 parameters, an AUC of 0.85 and a prevalence of 0.01, we need a sample size of 13,216 with 133 events. We can use these requirements to generate a hypothetical study population.</p>
 </section>
 <section id="generate-simulated-dataset" class="level3">
 <h3 class="anchored" data-anchor-id="generate-simulated-dataset">Generate simulated dataset</h3>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">888</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use model specs and minimum sample size to generate a sample population</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sample_pop <span class="ot">&lt;-</span> <span class="fu">get_sample</span>(</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">auc =</span> auc, </span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_samples =</span> sample_size, </span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">min_events =</span> min_events)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain predicted probabilities</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">glm</span>(actual <span class="sc">~</span> x, </span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>           <span class="at">data =</span> sample_pop, </span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>           <span class="at">family =</span> <span class="fu">binomial</span>()</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>           )</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>sample_pop<span class="sc">$</span>predicted <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit, <span class="at">type =</span> <span class="st">"response"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">888</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use model specs and minimum sample size to generate a sample population</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>sample_pop <span class="ot">&lt;-</span> <span class="fu">get_sample</span>(</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">auc =</span> auc, </span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_samples =</span> sample_size, </span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">prevalence =</span> p0, </span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">min_events =</span> min_events)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Obtain predicted probabilities</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">glm</span>(actual <span class="sc">~</span> x, </span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>           <span class="at">data =</span> sample_pop, </span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>           <span class="at">family =</span> <span class="fu">binomial</span>()</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>           )</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>sample_pop<span class="sc">$</span>predicted <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit, <span class="at">type =</span> <span class="st">"response"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="assign-costs-and-outcomes-to-2-x-2-table" class="level3">
@@ -218,40 +229,40 @@ div.csl-indent {
 <section id="fixed" class="level4">
 <h4 class="anchored" data-anchor-id="fixed">Fixed:</h4>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>fx_nmb <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">outcome_cost =</span> <span class="dv">14134</span>,</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">wtp =</span> wtp,</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">qalys_lost =</span> <span class="fl">0.03</span>,</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_cost =</span> <span class="fl">3.19</span> <span class="sc">*</span> <span class="dv">19</span>,</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_effect =</span> <span class="fl">0.910</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>fx_nmb <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">outcome_cost =</span> <span class="dv">14134</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">wtp =</span> wtp,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">qalys_lost =</span> <span class="fl">0.03</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_cost =</span> <span class="fl">3.19</span> <span class="sc">*</span> <span class="dv">19</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">high_risk_group_treatment_effect =</span> <span class="fl">0.910</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="stochastic" class="level4">
 <h4 class="anchored" data-anchor-id="stochastic">Stochastic:</h4>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>fx_nmb_sampler <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a> <span class="at">outcome_cost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">14134</span>, <span class="dv">686</span>),</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a> <span class="at">wtp =</span> wtp,</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a> <span class="at">qalys_lost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.03</span>, <span class="fl">0.04</span>),</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_cost =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="at">shape =</span> <span class="fl">110.314</span>, <span class="at">scale =</span> <span class="fl">0.172</span>) <span class="sc">*</span> <span class="fl">3.19</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_effect =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.910</span>, <span class="fl">0.036</span>)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>fx_nmb_sampler <span class="ot">&lt;-</span> <span class="fu">get_nmb_sampler</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a> <span class="at">outcome_cost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">14134</span>, <span class="dv">686</span>),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a> <span class="at">wtp =</span> wtp,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a> <span class="at">qalys_lost =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.03</span>, <span class="fl">0.04</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_cost =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="at">shape =</span> <span class="fl">110.314</span>, <span class="at">scale =</span> <span class="fl">0.172</span>) <span class="sc">*</span> <span class="fl">3.19</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a> <span class="at">high_risk_group_treatment_effect =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="fl">0.910</span>, <span class="fl">0.036</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="derive-cutpoints" class="level4">
 <h4 class="anchored" data-anchor-id="derive-cutpoints">Derive cutpoints</h4>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>nmb_simulation <span class="ot">&lt;-</span> <span class="fu">do_nmb_sim</span>(</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_size =</span> sample_size,</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_sims =</span> <span class="dv">500</span>,</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_valid =</span> <span class="dv">10000</span>,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">sim_auc =</span> auc,</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">event_rate =</span> p0,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_training =</span> fx_nmb,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_evaluation =</span> fx_nmb_sampler</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(nmb_simulation)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nmb_simulation <span class="ot">&lt;-</span> <span class="fu">do_nmb_sim</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_size =</span> sample_size,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_sims =</span> <span class="dv">500</span>,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_valid =</span> <span class="dv">10000</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">sim_auc =</span> auc,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">event_rate =</span> p0,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_training =</span> fx_nmb,</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">fx_nmb_evaluation =</span> fx_nmb_sampler</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(nmb_simulation)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 8 × 3
   method           median `95% CI`      
@@ -265,7 +276,7 @@ div.csl-indent {
 7 value optimising  -53.6 -72.5 to -38.9
 8 youden            -59.8 -84 to -41.8  </code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"inb"</span>, <span class="at">inb_ref_col =</span> <span class="st">"none"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"inb"</span>, <span class="at">inb_ref_col =</span> <span class="st">"none"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -273,7 +284,7 @@ div.csl-indent {
 </figure>
 </div>
 </div>
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"cutpoints"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(nmb_simulation, <span class="at">what =</span> <span class="st">"cutpoints"</span>) <span class="sc">+</span> <span class="fu">theme_sim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -286,11 +297,13 @@ div.csl-indent {
 <section id="ideas" class="level4">
 <h4 class="anchored" data-anchor-id="ideas">Ideas:</h4>
 <ol type="1">
-<li>What if we try for a surveillance example too - e.g., inpatient deterioration?</li>
-<li>Can we add a staff cost for false positives/false negatives?</li>
-<li>How do we incorporate estimates of staff time in the ranking system?</li>
-<li>Maybe we quantify how much time clinicians can dedicate to this (e.g.&nbsp;15 alerts max)</li>
-<li>Repeat the analysis for a miscalibrated model</li>
+<li>Could plot X = number of patients seen, Y = NMB, with a line for each approach. NMB would probably be highest for ranking early on, coming equal with other methods over time. This could then be calculated as a table with cost savings for different limits on X (based on clinicians’ willingness to respond to alerts).
+<ol type="1">
+<li>Then, could demonstrate how these plots change based on AUC and p0</li>
+</ol></li>
+<li>What if we try for a non-hospital example - elective surgery wait lists?</li>
+<li>Maybe we quantify how much time clinicians can dedicate to this (e.g.&nbsp;15 alerts max) - see Romero-Brufau approach</li>
+<li>Repeat the analysis for a miscalibrated model?</li>
 </ol>
 
 </section>

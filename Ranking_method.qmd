@@ -8,9 +8,9 @@ bibliography: references.bib
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk do not utilise the information being produced.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions.
 
-A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate. This approach can be considered in addition to other, ROC or value-based methods. [@Parsons2023]
+A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate, using the positive predictive value (PPV) to determine number needed to evaluate (NNE).[@romero-brufau2015] For example, a model with a PPV of 0.1 corresponds to a rate of 1 positive per 10 alerts, or a NNE of 10. This approach can be considered in addition to other, ROC or value-based methods. [@Parsons2023]
 
 This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?
 
@@ -22,22 +22,27 @@ This study contrasts the two approaches - if we randomly sample from a study pop
 3.  Simulate an underlying patient population using the minimum required sample size.
 4.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
 5.  Identify a selection of thresholds based on the study population used to generate the model.
+    i.  Value-optimising threshold
+    ii. Youden index (or other ROC-based method)
+    iii. PPV/NNE-based approach
 6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.
 7.  Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.
+    i.  To apply the ranking approach, need to select a number of patients to evaluate. If the patient's rank \<= number to evaluate, then they are evaluated (true/false positive). If the patient's rank \> number to evaluate, then they are not evaluated (true/false negative).
 8.  Compare NMB across variety of AUCs and prevalence for both ranking and threshold-based methods.
 
 ## Methods
 
-Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to an outreach team; false positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions.
+Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to an outreach team, in this case comprising of an ICU registrar, the patient's attending, and the patient's nurse.
 
-Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
+False positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions. Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
 
 ### Set up experiment
 
-```{r}
+```{r, echo = FALSE}
 options(scipen = 999, digits = 3)
 library(predictNMB)
 library(pROC)
+library(tidyverse)
 
 # Hypothetical model specs and event rate
 auc = 0.85
@@ -70,6 +75,8 @@ sample_pop <- get_sample(
   prevalence = p0, 
   min_events = min_events)
 
+sample_pop$actual <- factor(sample_pop$actual)
+
 # Obtain predicted probabilities
 fit <- glm(actual ~ x, 
            data = sample_pop, 
@@ -83,7 +90,7 @@ sample_pop$predicted <- predict(fit, type = "response")
 #### Parameters
 
 -   Additional costs due to deterioration \~𝒩(14134, 686) [@Curtis2021]
--   Effect of alert on ICU admission \~𝒩(0.910, 0.036) [@Escobar2020]
+-   Effect of alert on ICU admission rate (hazard ratio) \~𝒩(0.910, 0.036) [@Escobar2020]
 -   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
 -   Duration of clinical assessment (using MET call time) \~𝚪(110.314, 0.172) [@Bellomo2003]
     -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
@@ -93,7 +100,7 @@ sample_pop$predicted <- predict(fit, type = "response")
     -   Nurse hourly: 30.47 \* (1.03)\^(2024 - 2016) = 0.64
     -   Altogether: \$3.19/minute (fixed)
 
-#### Fixed:
+##### Fixed
 
 ```{r}
 fx_nmb <- get_nmb_sampler(
@@ -105,7 +112,7 @@ fx_nmb <- get_nmb_sampler(
 )
 ```
 
-#### Stochastic:
+##### Stochastic:
 
 ```{r}
 fx_nmb_sampler <- get_nmb_sampler(
@@ -117,7 +124,9 @@ fx_nmb_sampler <- get_nmb_sampler(
 )
 ```
 
-#### Derive cutpoints
+## Derive cutpoints
+
+### ROC-curve and NMB-based cutpoints
 
 ```{r}
 nmb_simulation <- do_nmb_sim(
@@ -131,7 +140,49 @@ nmb_simulation <- do_nmb_sim(
 )
 summary(nmb_simulation)
 autoplot(nmb_simulation, what = "inb", inb_ref_col = "none") + theme_sim()
-autoplot(nmb_simulation, what = "cutpoints") + theme_sim()
+
+cutpoint_youden <- median(nmb_simulation$df_thresholds$youden)
+cutpoint_nmb <- median(nmb_simulation$df_thresholds$value_optimising)
+```
+
+### PPV-based threshold
+
+```{r, echo = FALSE}
+roc_curve <- roc(response = sample_pop$actual, predictor = sample_pop$predicted)
+ppv <- coords(
+  roc_curve, 
+  x = "all", 
+  input = "threshold", 
+  ret = c("threshold", "ppv")
+  )
+
+# Maximum tolerable number of false positives per true positive
+nne = 4
+
+# NNE = 1/PPV
+ppv$nne <- 1/ppv$ppv
+cutpoint_nne <- min(ppv$threshold[ppv$nne == nne], na.rm = T)
+```
+
+## Apply cutpoints to randomly drawn data
+
+```{r}
+combs <- expand.grid(
+  auc = c(0.65, 0.75, 0.85, 0.95),
+  p0 = c(0.005, 0.010, 0.015, 0.020)
+  )
+
+sims <- map2(.x = combs$auc, .y = combs$p0, 
+             \(x, y) cbind(
+               get_sample(auc = x, 
+                          n_samples = 1000, 
+                          prevalence = y),
+               auc = x,
+               p0 = y)
+)
+
+df_sims <- do.call(rbind, sims) |>
+  mutate(predicted = predict(fit, newdata = pick(x), type = "response"))
 ```
 
 #### Ideas:
