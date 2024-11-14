@@ -8,16 +8,17 @@ bibliography: references.bib
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds. Thresholds, while convenient to implement, may be less cost-effective than ranking given that a ranking system should identify true positives first. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. Thresholds, while convenient to implement, may be less cost-effective than ranking, given that a ranking system should theoretically be capable of identifying true positives first from a discriminating model. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions.
 
 A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate, using the positive predictive value (PPV) to determine number needed to evaluate (NNE).[@romero-brufau2015] For example, a model with a PPV of 0.1 corresponds to a rate of 1 positive per 10 alerts, or a NNE of 10. This approach can be considered in addition to other, ROC or value-based methods. [@Parsons2023]
 
-This study contrasts the two approaches - if we randomly sample from a study population, what is the economic impact of applying a ranking approach compared to a threshold approach?
+This study contrasts the two approaches: what is the economic impact of applying a ranking approach compared to a threshold approach for a given sample population?
 
 ## Study outline
 
 1.  Determine a use case.
-    i.  In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to additional costs and worse outcomes.
+    i.  In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to potentially avoidable additional costs and poor outcomes. We can use the implementation of Escobar et al (2020) to obtain prevalence for ICU admission, a common endpoint for deterioration prediction. [@Escobar2020]
+    ii. Clinical deterioration is characterised by several challenges including which outcome to use and, depending on the selected outcome, a low prevalence of the event. [@Blythe2023] However, this has not dissuaded hospitals from applying clinical deterioration models, despite the lack of success in improving patient outcomes. [@Blythe2022]
 2.  Simulate a hypothetical clinical prediction model with a given AUC and underlying prevalence.
 3.  Simulate an underlying patient population using the minimum required sample size.
 4.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
@@ -27,14 +28,15 @@ This study contrasts the two approaches - if we randomly sample from a study pop
     iii. PPV/NNE-based approach
 6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.
 7.  Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.
-    i.  To apply the ranking approach, need to select a number of patients to evaluate. If the patient's rank \<= number to evaluate, then they are evaluated (true/false positive). If the patient's rank \> number to evaluate, then they are not evaluated (true/false negative).
+    i.  To apply the ranking approach, we can derive a function/visualisation for the incremental NMB for each patient evaluated. Clinicians can move down the list until they reach a discretionary point where additional evaluation is not warranted.
+    ii. To apply the threshold approach, each patient MUST be evaluated. This is the difference with the ranking approach, which is discretionary. Clinicians can rank patients above the threshold, but not below it.
 8.  Compare NMB across variety of AUCs and prevalence for both ranking and threshold-based methods.
 
 ## Methods
 
-Let's assume that, left unassessed, a deteriorating medical inpatient will need to be unexpectedly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate care to an outreach team, in this case comprising of an ICU registrar, the patient's attending, and the patient's nurse.
+Let's assume that, left unassessed, a deteriorating medical inpatient will need to be rapidly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate that decision to an outreach team, in this case comprising of an ICU registrar, the patient's attending, and the patient's nurse.
 
-False positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions. Considering that many patients will require ICU admission regardless of whether they can be successfully intervened with, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
+False positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions. Considering that many patients will require ICU admission regardless of whether they can be successfully intervened upon, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
 
 ### Set up experiment
 
@@ -47,7 +49,7 @@ library(tidyverse)
 # Hypothetical model specs and event rate
 auc = 0.85
 params = 30
-p0 = 0.01
+p0 = 0.05
 wtp = ceiling(28033*(1.03)^(2024 - 2018))
 
 # Obtain minimum sample size/events
@@ -89,22 +91,26 @@ sample_pop$predicted <- predict(fit, type = "response")
 
 #### Parameters
 
--   Additional costs due to deterioration \~𝒩(14134, 686) [@Curtis2021]
--   Effect of alert on ICU admission rate (hazard ratio) \~𝒩(0.910, 0.036) [@Escobar2020]
--   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
--   Duration of clinical assessment (using MET call time) \~𝚪(110.314, 0.172) [@Bellomo2003]
-    -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
+-   Additional costs due to deterioration
+    -   The additional utilisation cost of deterioration is \~𝒩(14134, 686) [@Curtis2021]
+    -   This cost is in addition to a clinical ICU assessment (see below)
 -   Cost of clinical time per minute based on ICU outreach registrar, the resident medical officer, and the patient's nurse [@Bohingamu2024]
     -   ICU outreach registrar hourly: 69.91/60 \* (1.03)\^(2024 - 2016) = 1.48
     -   Resident medical officer hourly: 50.79/60 \* (1.03)\^(2024 - 2016) = 1.07
     -   Nurse hourly: 30.47 \* (1.03)\^(2024 - 2016) = 0.64
     -   Altogether: \$3.19/minute (fixed)
+-   Duration of clinical assessment (using MET call time) \~𝚪(110.314, 0.172) [@Bellomo2003]
+    -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
+-   Effect of alert on ICU admission rate (hazard ratio) \~𝒩(0.910, 0.036) [@Escobar2020]
+-   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
+
+# NOTE - THE COST OF A FALSE POSITIVE IS PROBABLY TOO LOW HERE - NEED A GOOD OPPORTUNITY COST OR SOMETHING?
 
 ##### Fixed
 
 ```{r}
 fx_nmb <- get_nmb_sampler(
-  outcome_cost = 14134,
+  outcome_cost = 14134 + 3.19 * 19,
   wtp = wtp,
   qalys_lost = 0.03,
   high_risk_group_treatment_cost = 3.19 * 19,
@@ -115,11 +121,13 @@ fx_nmb <- get_nmb_sampler(
 ##### Stochastic:
 
 ```{r}
+cost_eval <- function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19
+
 fx_nmb_sampler <- get_nmb_sampler(
- outcome_cost = function() rnorm(1, 14134, 686),
+ outcome_cost = function() rnorm(1, 14134, 686) + cost_eval(),
  wtp = wtp,
  qalys_lost = function() rnorm(1, 0.03, 0.04),
- high_risk_group_treatment_cost = function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19,
+ high_risk_group_treatment_cost = cost_eval(),
  high_risk_group_treatment_effect = function() rnorm(1, 0.910, 0.036)
 )
 ```
@@ -166,10 +174,12 @@ cutpoint_nne <- min(ppv$threshold[ppv$nne == nne], na.rm = T)
 
 ## Apply cutpoints to randomly drawn data
 
+We can now simulate an external validation study under a variety of conditions based on a range of AUC and prevalence values. This mimics a scenario in which we take the original model, developed under the conditions of AUC = 0.85 and p0 of 0.05, and apply the predictions to other datasets, also created using the get_sample() function.
+
 ```{r}
 combs <- expand.grid(
   auc = c(0.65, 0.75, 0.85, 0.95),
-  p0 = c(0.005, 0.010, 0.015, 0.020)
+  p0 = c(0.01, 0.05, 0.10, 0.15)
   )
 
 sims <- map2(.x = combs$auc, .y = combs$p0, 
@@ -181,8 +191,23 @@ sims <- map2(.x = combs$auc, .y = combs$p0,
                p0 = y)
 )
 
-df_sims <- do.call(rbind, sims) |>
-  mutate(predicted = predict(fit, newdata = pick(x), type = "response"))
+source("./utils.R")
+
+# The 'sims' object can then be turned into a set of predictions and classifications (see utils.R)
+
+# In utils, there is a custom classifier() function that compares predicted vs outcome and allocates a class by 2x2 table
+
+df_sims <- obtain_class(sims, samples = 100)
+
+head(df_sims, 10)
+```
+
+## Obtain NMB of each strategy
+
+We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). This allows us to specify where each strategy lands on the confusion matrix and therefore what the NMB of each prediction is. We have a stochastic function, fx_nmb_sampler(), so we should use it to generate Monte Carlo samples.
+
+```{r, echo = FALSE}
+results <- obtain_payoffs(df_sims)
 ```
 
 #### Ideas:
