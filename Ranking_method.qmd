@@ -40,7 +40,7 @@ False positives can lead to wasted clinician time, and false negatives can lead 
 
 ### Set up experiment
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, message = FALSE}
 options(scipen = 999, digits = 3)
 library(predictNMB)
 library(pROC)
@@ -102,34 +102,79 @@ sample_pop$predicted <- predict(fit, type = "response")
 -   Duration of clinical assessment (using MET call time) \~𝚪(110.314, 0.172) [@Bellomo2003]
     -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
 -   Effect of alert on ICU admission rate (hazard ratio) \~𝒩(0.910, 0.036) [@Escobar2020]
+    -   Note: must be taken as (1 - HR) for sampler
 -   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
-
-# NOTE - THE COST OF A FALSE POSITIVE IS PROBABLY TOO LOW HERE - NEED A GOOD OPPORTUNITY COST OR SOMETHING?
+-   Opportunity cost of a positive alert = probability patient can be successfully treated \* underlying prevalence of event \* cost of outcome avoided if successfully treated (i.e., if the clinicians were doing something more productive with their time)
 
 ##### Fixed
 
 ```{r}
-fx_nmb <- get_nmb_sampler(
-  outcome_cost = 14134 + 3.19 * 19,
+# High cost of false positive
+fx_nmb_high <- get_nmb_sampler(
+  # Cost of ICU admission
+  outcome_cost = 14134,
+  # Willingness to pay per QALY
   wtp = wtp,
+  # QALYs lost due to deterioration event
   qalys_lost = 0.03,
-  high_risk_group_treatment_cost = 3.19 * 19,
-  high_risk_group_treatment_effect = 0.910
+  # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity       cost = chance of successful intervention * outcome cost * underlying p0)
+  high_risk_group_treatment_cost = (3.19 * 19) + ((1 - 0.910) * 14134 * p0),
+  # Chance of successful intervention
+  high_risk_group_treatment_effect = 1 - 0.910
+)
+
+# Low cost of false positive
+fx_nmb_low <- get_nmb_sampler(
+  # Cost of ICU admission
+  outcome_cost = 14134,
+  # Willingness to pay per QALY
+  wtp = wtp,
+  # QALYs lost due to deterioration event
+  qalys_lost = 0.03,
+  # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity       cost = chance of successful intervention * outcome cost * underlying p0)
+  high_risk_group_treatment_cost = (3.19 * 19),
+  # Chance of successful intervention
+  high_risk_group_treatment_effect = 1 - 0.910
 )
 ```
 
 ##### Stochastic:
 
 ```{r}
-cost_eval <- function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19
+# Need to make a wrapper as the same estimates should be used for multiple cells
+# High cost of false positive:
+sampler_high <- function() {
+  cost_outcome <- rnorm(1, 14134, 686)
+  eff_outcome <- 1 - rnorm(1, 0.910, 0.036)
+  
+  fx_nmb_sampler <- get_nmb_sampler(
+    outcome_cost = cost_outcome,
+    wtp = wtp,
+    qalys_lost = function() rnorm(1, 0.03, 0.04),
+    high_risk_group_treatment_cost =
+      function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
+      (p0 * eff_outcome * cost_outcome),
+    high_risk_group_treatment_effect = eff_outcome
+  )
+  
+  fx_nmb_sampler()
+}
 
-fx_nmb_sampler <- get_nmb_sampler(
- outcome_cost = function() rnorm(1, 14134, 686) + cost_eval(),
- wtp = wtp,
- qalys_lost = function() rnorm(1, 0.03, 0.04),
- high_risk_group_treatment_cost = cost_eval(),
- high_risk_group_treatment_effect = function() rnorm(1, 0.910, 0.036)
-)
+sampler_low <- function() {
+  cost_outcome <- rnorm(1, 14134, 686)
+  eff_outcome <- 1 - rnorm(1, 0.910, 0.036)
+  
+  fx_nmb_sampler <- get_nmb_sampler(
+    outcome_cost = cost_outcome,
+    wtp = wtp,
+    qalys_lost = function() rnorm(1, 0.03, 0.04),
+    high_risk_group_treatment_cost =
+      function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19,
+    high_risk_group_treatment_effect = eff_outcome
+  )
+  
+  fx_nmb_sampler()
+}
 ```
 
 ## Derive cutpoints
@@ -137,25 +182,46 @@ fx_nmb_sampler <- get_nmb_sampler(
 ### ROC-curve and NMB-based cutpoints
 
 ```{r}
-nmb_simulation <- do_nmb_sim(
+# Low estimate
+nmb_simulation_low <- do_nmb_sim(
   sample_size = sample_size,
   n_sims = 500,
   n_valid = 10000,
   sim_auc = auc,
   event_rate = p0,
-  fx_nmb_training = fx_nmb,
-  fx_nmb_evaluation = fx_nmb_sampler
+  fx_nmb_training = fx_nmb_low,
+  fx_nmb_evaluation = sampler_low
 )
-summary(nmb_simulation)
-autoplot(nmb_simulation, what = "inb", inb_ref_col = "none") + theme_sim()
+summary(nmb_simulation_low)
+autoplot(nmb_simulation_low, what = "inb", inb_ref_col = "none") + theme_sim()
+autoplot(nmb_simulation_low, what = "cutpoints") + theme_sim()
 
-cutpoint_youden <- median(nmb_simulation$df_thresholds$youden)
-cutpoint_nmb <- median(nmb_simulation$df_thresholds$value_optimising)
+cutpoint_youden_low <- median(nmb_simulation_low$df_thresholds$youden)
+cutpoint_nmb_low <- median(nmb_simulation_low$df_thresholds$value_optimising)
+```
+
+```{r}
+# High estimate
+nmb_simulation_high <- do_nmb_sim(
+  sample_size = sample_size,
+  n_sims = 500,
+  n_valid = 10000,
+  sim_auc = auc,
+  event_rate = p0,
+  fx_nmb_training = fx_nmb_high,
+  fx_nmb_evaluation = sampler_high
+)
+summary(nmb_simulation_high)
+autoplot(nmb_simulation_high, what = "inb", inb_ref_col = "none") + theme_sim()
+autoplot(nmb_simulation_high, what = "cutpoints") + theme_sim()
+
+cutpoint_youden_high <- median(nmb_simulation_high$df_thresholds$youden)
+cutpoint_nmb_high <- median(nmb_simulation_high$df_thresholds$value_optimising)
 ```
 
 ### PPV-based threshold
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, message = FALSE}
 roc_curve <- roc(response = sample_pop$actual, predictor = sample_pop$predicted)
 ppv <- coords(
   roc_curve, 
@@ -164,7 +230,7 @@ ppv <- coords(
   ret = c("threshold", "ppv")
   )
 
-# Maximum tolerable number of false positives per true positive
+# Maximum tolerable number of false positives per true positive (example)
 nne = 4
 
 # NNE = 1/PPV
@@ -206,14 +272,63 @@ head(df_sims, 10)
 
 We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). This allows us to specify where each strategy lands on the confusion matrix and therefore what the NMB of each prediction is. We have a stochastic function, fx_nmb_sampler(), so we should use it to generate Monte Carlo samples.
 
-```{r, echo = FALSE}
-results <- obtain_payoffs(df_sims)
+```{r, echo = FALSE, message = FALSE}
+results_low <- obtain_payoffs(df_sims, sampler_low())
+results_high <- obtain_payoffs(df_sims, sampler_high())
+
+# Switch to long format for the classrank
+results_low <- results_low |>
+  pivot_longer(nmb_classrank5:nmb_classrank25, 
+               names_to = "Patients_evaluated", 
+               values_to = "NMB") |>
+  mutate(Patients_evaluated = as.numeric(gsub(
+    "nmb_classrank",
+    "",
+    Patients_evaluated)))
+
+results_high <- results_high |>
+  pivot_longer(nmb_classrank5:nmb_classrank25, 
+               names_to = "Patients_evaluated", 
+               values_to = "NMB") |>
+  mutate(Patients_evaluated = as.numeric(gsub(
+    "nmb_classrank",
+    "",
+    Patients_evaluated)))
+
+# Plot results
+p_low <- results_low |> ggplot(aes(x = Patients_evaluated))
+p_high <- results_high |> ggplot(aes(x = Patients_evaluated))
+
+p_low +
+  geom_line(aes(y = NMB, colour = "Ranking")) +
+  geom_line(aes(y = nmb_val_opt, colour = "Value-optimising threshold")) +
+  geom_line(aes(y = nmb_nne, colour = "NNE threshold")) +
+  geom_line(aes(y = nmb_youden, colour = "Youden threshold")) +
+  scale_colour_manual(name = "Implementation method",
+                      values = c(
+                        "Ranking" = "#000000",
+                        "Value-optimising threshold" = "#999999",
+                        "NNE threshold" = "#0072B2",
+                        "Youden threshold" = "#E69F00"
+                      )) +
+  facet_wrap(vars(auc, p0), scales = "free_y")
+
+p_high +
+  geom_line(aes(y = NMB, colour = "Ranking")) +
+  geom_line(aes(y = nmb_val_opt, colour = "Value-optimising threshold")) +
+  geom_line(aes(y = nmb_nne, colour = "NNE threshold")) +
+  geom_line(aes(y = nmb_youden, colour = "Youden threshold")) +
+  scale_colour_manual(name = "Implementation method",
+                      values = c(
+                        "Ranking" = "#000000",
+                        "Value-optimising threshold" = "#999999",
+                        "NNE threshold" = "#0072B2",
+                        "Youden threshold" = "#E69F00"
+                      )) +
+  facet_wrap(vars(auc, p0), scales = "free_y")
 ```
 
 #### Ideas:
 
-1.  Could plot X = number of patients seen, Y = NMB, with a line for each approach. NMB would probably be highest for ranking early on, coming equal with other methods over time. This could then be calculated as a table with cost savings for different limits on X (based on clinicians' willingness to respond to alerts).
-    1.  Then, could demonstrate how these plots change based on AUC and p0
-2.  What if we try for a non-hospital example - elective surgery wait lists?
-3.  Maybe we quantify how much time clinicians can dedicate to this (e.g. 15 alerts max) - see Romero-Brufau approach
-4.  Repeat the analysis for a miscalibrated model?
+1.  What if we try for a non-hospital example - elective surgery wait lists?
+2.  Repeat the analysis for a miscalibrated model?

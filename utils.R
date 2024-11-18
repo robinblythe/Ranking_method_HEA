@@ -30,8 +30,8 @@ classifier <- function(classifier, actual, payoffs) {
   )
 }
 
-obtain_payoffs <- function(df) {
-  payoffs <- fx_nmb_sampler()
+obtain_payoffs <- function(df, fn_sampler) {
+  payoffs <- fn_sampler
 
   df_payoff <- df |>
     mutate(nmb_val_opt = classifier(class_val_opt, actual, payoffs),
