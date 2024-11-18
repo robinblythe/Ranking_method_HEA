@@ -251,6 +251,14 @@ p +
 ggsave(file = "results.png", height = 8, width = 10)
 ```
 
+## Scenario analysis: Resource-limited applications
+
+Suppose we have identified an appropriate threshold from a cost-effectiveness or number-needed-to-evaluate perspective, but lack the staff to carry out an intervention on all patients identified as high risk. For example, patients who enter a waiting list may be waiting for a limited number of spots. This scenario examines whether there is a benefit to ranking waitlisted patients, rather than selecting randomly from all high-risk individuals.
+
+1.  Draw large samples of (e.g.) 1000 individuals and filter by high risk patients
+2.  Select a random sample of e.g. 20 patients who can be actioned based on available resources
+3.  Compare this sample to a ranked list of the top 20 patients and obtain the NMB of each example, comparing the payoff across different auc/prevalence values
+
 #### Ideas:
 
 1.  What if we try for a non-hospital example - elective surgery wait lists?
