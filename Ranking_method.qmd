@@ -1,14 +1,14 @@
 ---
 title: "Ranking method simulation study"
 author: "Robin Blythe"
-format: html
+format: docx
 editor: visual
 bibliography: references.bib
 ---
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. Thresholds, while convenient to implement, may be less cost-effective than ranking, given that a ranking system should theoretically be capable of identifying true positives first from a discriminating model. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions. This is especially true when there may be a large number of individuals classified as high risk, but due to time or resource constraints, not all patients can be treated.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. Thresholds, while convenient to implement, may be less cost-effective than ranking, given that a ranking system should theoretically be capable of identifying true positives first from a discriminating model. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions. This is especially true when there may be a large number of individuals classified as high risk, but due to time or resource constraints, not all high-risk patients can be treated.
 
 This study compares a ranking-based approach to a threshold based approach both with and without resource constraints to determine the impact of risk dichotomisation.
 
@@ -19,26 +19,16 @@ This study compares a ranking-based approach to a threshold based approach both 
 1.  Determine a use case.
     i.  In this study, we will examine the implementation of a program to identify patients at high risk of deterioration leading to potentially avoidable additional costs and poor outcomes. We can use the implementation of Escobar et al (2020) to obtain prevalence for ICU admission, a common endpoint for deterioration prediction. [@Escobar2020]
     ii. Clinical deterioration is characterised by several challenges including which outcome to use and, depending on the selected outcome, a low prevalence of the event. [@Blythe2023] However, this has not deterred hospitals from applying clinical deterioration models, despite the lack of success in improving patient outcomes. [@Blythe2022]
-2.  Simulate a hypothetical clinical prediction model with a given AUC and underlying prevalence.
-3.  Simulate an underlying patient population using the minimum required sample size.
+2.  Simulate an underlying patient population using the minimum required sample size.
+3.  Simulate a hypothetical clinical prediction model with a given AUC and underlying prevalence.
 4.  Obtain costs and outcomes for each state: true positive, true negative, false positive, false negative.
 5.  Identify a selection of thresholds based on the study population used to generate the model.
     i.  Value-optimising threshold
     ii. Youden index (or other ROC-based method)
     iii. PPV/NNE-based approach
-6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic external validation.
-
-### Scenario 1: All high risk patients are treated
-
-1.  Apply the threshold obtained from step 5 and the ranking approach, obtaining costs and outcomes for each sample.
-    i.  To apply the ranking approach, we can derive a function/visualisation for the incremental NMB for each patient evaluated. Clinicians can move down the list until they reach a discretionary point where additional evaluation is not warranted.
-    ii. To apply the threshold approach, each patient MUST be evaluated. This is the difference with the ranking approach, which is discretionary. Clinicians can rank patients above the threshold, but not below it.
-2.  Compare NMB across variety of AUCs and prevalence for both ranking and threshold-based methods.
-
-### Scenario 2: Only some high risk patients can be treated
-
-1.  Apply the threshold from step 5, filtering the data to include only high risk patients. Sort patients in order of predicted risk (descending).
-2.  Compare the net monetary benefit of treating a random sample of N patients to treating a ranked list of the top N patients.
+6.  Randomly generate new sample populations based on a range of plausible AUC and prevalence values to mimic new patients being treated with the original model.
+7.  Apply the thresholds from step 5, filtering the data to include only high risk patients. Sort patients in order of predicted risk (descending).
+8.  Compare the net monetary benefit of treating a random sample of N patients to treating a ranked list of the top N patients.
 
 ## Methods
 
@@ -69,6 +59,7 @@ pmsamp <- pmsampsize::pmsampsize(
 
 sample_size <- pmsamp$sample_size
 min_events <- ceiling(pmsamp$events)
+remove(pmsamp)
 ```
 
 For a model with `r params` parameters, an AUC of `r auc` and a prevalence of `r p0`, we need a sample size of `r format(sample_size, big.mark = ",")` with `r min_events` events. We can use these requirements to generate a hypothetical study population.
@@ -159,7 +150,7 @@ sampler <- function() {
 ```{r}
 nmb_simulation <- do_nmb_sim(
   sample_size = sample_size,
-  n_sims = 1000,
+  n_sims = 500,
   n_valid = 10000,
   sim_auc = auc,
   event_rate = p0,
@@ -172,6 +163,7 @@ autoplot(nmb_simulation, what = "cutpoints") + theme_sim()
 
 cutpoint_youden <- median(nmb_simulation$df_thresholds$youden)
 cutpoint_nmb <- median(nmb_simulation$df_thresholds$value_optimising)
+remove(nmb_simulation)
 ```
 
 ### PPV-based threshold
@@ -193,6 +185,7 @@ nne = 4
 # NNE = 1/PPV
 ppv$nne <- 1/ppv$ppv
 cutpoint_nne <- min(ppv$threshold[ppv$nne == nne], na.rm = T)
+remove(roc_curve, ppv, sample_pop)
 ```
 
 ## Obtain predictions for variety of external validation scenarios
@@ -213,13 +206,10 @@ sims <- map2(.x = combs$auc, .y = combs$p0,
                auc = x,
                p0 = y)
 )
+remove(combs)
 ```
 
-## Scenario 1: All high-risk individuals can be treated
-
-This scenario examines the impact of ranking compared to thresholds when all patients can be treated.
-
-### Apply cutpoints to randomly drawn data
+### Apply cutpoints to classify predictions
 
 We can now simulate an external validation study under a variety of conditions based on a range of AUC and prevalence values. This mimics a scenario in which we take the original model, developed under the conditions of AUC = 0.85 and p0 of 0.05, and apply the predictions to other datasets, also created using the get_sample() function.
 
@@ -230,102 +220,117 @@ source("./utils.R")
 
 # In utils, there is a custom classifier() function that compares predicted vs outcome and allocates a class by 2x2 table
 
-df_sims_treat_all <- obtain_class(sims, samples = 150)
-head(df_sims_treat_all, 15)
+df_sims <- obtain_class(sims)
+remove(sims)
 ```
 
 ### Obtain NMB of each strategy
 
-We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). This allows us to specify where each strategy lands on the confusion matrix and therefore what the NMB of each prediction is. We have a stochastic function, fx_nmb_sampler(), so we should use it to generate Monte Carlo samples.
+We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). However, as the thresholds were drawn using all the data, they may not be suitable when extrapolating to other scenarios, for example a future patient population. In practice, we may often see that a threshold can identify many patients at risk, but we can only see a small number of these patients based on resource constraints (e.g., clinical time). We can use the risk predictions to prioritise patients (ranking), or we can just randomly select positive cases.
+
+We can simulate this by taking random draws of e.g. 40 patients with a positive prediction for each threshold method. We can then compare this to a ranking approach where we sort by predicted risk and take the top 40.
+
+Method:
+
+1.  For each AUC and prevalence, take 40 random draws for positive cases from each threshold method (NMB, NNE, Youden)
+2.  Take the top 40 patients by predicted risk.
+3.  Compare the positive predictive value by assigning outcomes (TP, FP, TN, FN) to each patient
+4.  Repeat steps 1:3 B times for uncertainty estimates
+
+Note: The issue this whole time was that by identifying more false positives, it actually makes the model look way worse. True positives are way more expensive than false positives, so the method was actually incentivising finding false positives. We actually want the false positives to be true negatives. Using NMB was not the right approach here.
 
 ```{r, message = FALSE}
-results_all <- obtain_payoffs(df_sims_treat_all, fx_nmb()) |>
-  pivot_longer(nmb_classrank3:nmb_classrank15, 
-               names_to = "Patients_evaluated", 
-               values_to = "NMB") |>
-  mutate(Patients_evaluated = as.numeric(gsub(
-    "nmb_classrank",
-    "",
-    Patients_evaluated)))
+n_samples = 40
+sim_results <- list()
+for (i in 1:1000){
+  df_youden <- obtain_sample(df_sims, "class_youden", n_samples)
+  df_nne <- obtain_sample(df_sims, "class_nne", n_samples)
+  df_val_opt <- obtain_sample(df_sims, "class_val_opt", n_samples)
   
-
-# Plot results
-p <- results_all |> ggplot(aes(x = Patients_evaluated))
-
-p +
-  geom_line(aes(y = NMB, colour = "Ranking")) +
-  geom_line(aes(y = nmb_val_opt, colour = "Value-optimising threshold")) +
-  geom_line(aes(y = nmb_nne, colour = "NNE threshold")) +
-  geom_line(aes(y = nmb_youden, colour = "Youden threshold")) +
-  scale_colour_manual(name = "Implementation method",
-                      values = c(
-                        "Ranking" = "#000000",
-                        "Value-optimising threshold" = "#999999",
-                        "NNE threshold" = "#0072B2",
-                        "Youden threshold" = "#E69F00"
-                      )) +
-  facet_wrap(vars(auc, p0), scales = "free_y", nrow = 4, ncol = 3)
-
-ggsave(file = "results_treat_all.png", height = 8, width = 10)
-```
-
-## Scenario 2: Resource-limited applications
-
-Suppose we have identified an appropriate threshold from a cost-effectiveness or number-needed-to-evaluate perspective, but lack the staff to carry out an intervention on all patients identified as high risk. For example, patients who enter a waiting list may be waiting for a limited number of spots. This scenario examines whether there is a benefit to ranking waitlisted patients, rather than selecting randomly from all high-risk individuals.
-
-```{r, message = FALSE}
-# Assume that due to resource constraints, only 10 patients can be treated
-# Treat_some: randomly sample from high risk
-n_patients = 15
-
-df_sims_treat_val_opt <- df_sims_treat_all |> 
-  filter(class_val_opt == 1) |>
-  group_by(auc, p0) |>
-  slice_sample(n = n_patients)
-
-df_sims_treat_nne <- df_sims_treat_all |>
-  filter(class_nne == 1) |>
-  group_by(auc, p0) |>
-  slice_sample(n = n_patients)
-
-df_sims_treat_youden <- df_sims_treat_all |>
-  filter(class_youden == 1) |>
-  group_by(auc, p0) |>
-  slice_sample(n = n_patients)
+  df_rank <- df_sims |>
+    group_by(auc, p0) |>
+    arrange(desc(predicted)) |>
+    slice_head(n = n_samples) |>
+    mutate(Method = "ranking") |>
+    select(Method, auc, p0, predicted, actual) 
   
-df_sims_treat_rank <- df_sims_treat_all |>
-  group_by(auc, p0) |>
-  filter(rank <= 10)
+  iteration <- do.call(rbind, list(df_youden, df_nne, df_val_opt, df_rank)) |>
+    group_by(Method, auc, p0) |>
+    rowwise() |>
+    mutate(Outcome = ifelse(actual == 1, "TP", "FP"),
+           Cost = ifelse(
+             Outcome == "FP",
+             rgamma(1, shape = 110.314, scale = 0.172) * 3.19 + 
+               (p0 * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686)),
+             0),
+           iter = i)
+  
+  sim_results[[i]] <- iteration
+  remove(df_youden, df_nne, df_val_opt, df_rank, iteration)
+}
 
-results_treat_val_opt <- obtain_payoffs(df_sims_treat_val_opt) |> 
-  select(auc, p0, nmb_val_opt)
+results <- do.call(rbind, sim_results)
+results$TP_rate <- ifelse(results$Outcome == "TP", 1, 0)
 
-results_treat_nne <- obtain_payoffs(df_sims_treat_nne) |>
-  select(auc, p0, nmb_nne)
+results <- results |>
+  group_by(Method, auc, p0, iter) |>
+  summarise(PPV = mean(TP_rate),
+            Cost = mean(Cost)) |>
+  group_by(Method, auc, p0) |>
+  summarise(PPV_median = median(PPV),
+            PPV_low = quantile(PPV, 0.025),
+            PPV_high = quantile(PPV, 0.975),
+            Cost_median = median(Cost),
+            Cost_low = quantile(Cost, 0.025),
+            Cost_high = quantile(Cost, 0.975)) |>
+  rename(PPV = PPV_median,
+         Cost = Cost_median) |>
+  mutate(Method = case_when(
+    Method == "nne" ~ "NNE-based threshold",
+    Method == "val_opt" ~ "Value-optimising threshold",
+    Method == "youden" ~ "Youden index threshold",
+    Method == "ranking" ~ "Ranking by predicted risk"
+  ))
 
-results_treat_youden <- obtain_payoffs(df_sims_treat_youden) |>
-  select(auc, p0, nmb_youden)
+p0_values <- c(`0.01` = "Prevalence = 0.01",
+               `0.05` = "Prevalence = 0.05",
+               `0.1` = "Prevalence = 0.10")
 
-results_treat_rank <- obtain_payoffs(df_sims_treat_rank) |>
-  select(auc, p0, paste0("nmb_classrank", n_patients))
+p_PPV <- results |> 
+  ggplot(aes(x = auc, y = PPV, colour = Method, fill = Method))
 
-results_treat_sample <- reduce(
-  .x = list(
-    results_treat_val_opt, 
-    results_treat_nne, 
-    results_treat_youden, 
-    results_treat_rank),
-  merge,
-  by = c("auc", "p0"),
-  all = TRUE
-  )
+p_PPV +
+  geom_line(linewidth = 2) +
+  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high), 
+              alpha = 0.2, linetype = "dotted"
+              ) +
+  facet_wrap(vars(p0), labeller = as_labeller(p0_values)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom") +
+  scale_x_continuous(limits = c(0.64, 0.96),
+                     breaks = seq(0.65, 0.95, 0.1), 
+                     name = "Model AUC")
+
+ggsave(filename = "PPV_results.png", height = 6, width = 10)
+
+p_costs <- results |>
+  ggplot(aes(x = auc, y = Cost, colour = Method, fill = Method))
+
+p_costs +
+  geom_line(linewidth = 2) +
+  geom_ribbon(aes(ymin = Cost_low, ymax = Cost_high), 
+              alpha = 0.2, linetype = "dotted"
+              ) +
+  facet_wrap(vars(p0), labeller = as_labeller(p0_values)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom") +
+  scale_x_continuous(limits = c(0.64, 0.96), 
+                     breaks = seq(0.65, 0.95, 0.1), 
+                     name = "Model AUC") +
+  scale_y_continuous(breaks = seq(25, 200, 25), 
+                     name = "Cost of false positives")
+
+ggsave(filename = "Cost_results.png", height = 6, width = 10)
 ```
-
-1.  Draw large samples of (e.g.) 1000 individuals and filter by high risk patients
-2.  Select a random sample of e.g. 20 patients who can be actioned based on available resources
-3.  Compare this sample to a ranked list of the top 20 patients and obtain the NMB of each example, comparing the payoff across different auc/prevalence values
-
-#### Ideas:
-
-1.  What if we try for a non-hospital example - elective surgery wait lists?
-2.  Repeat the analysis for a miscalibrated model?
