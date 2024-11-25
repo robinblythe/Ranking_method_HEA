@@ -8,9 +8,17 @@ bibliography: references.bib
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. Thresholds, while convenient to implement, may be less cost-effective than ranking, given that a ranking system should theoretically be capable of identifying true positives first from a discriminating model. Prediction models are capable of generating rich outcome data, but dichotomising into high and low risk does not fully utilise predictions. This is especially true when there may be a large number of individuals classified as high risk, but due to time or resource constraints, not all high-risk patients can be treated.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. In clinical prediction model implementation, a threshold refers to a predicted value above which the patient is deemed high risk, and below which they are deemed low risk. This can be convenient to implement as patients can be dichotomised into few risk categories, however in some clinical settings including acute or emergency care, some patients must be evaluated more urgently than others, and there may be too many high risk patients to evaluate in a timely manner.
 
-This study compares a ranking-based approach to a threshold based approach both with and without resource constraints to determine the impact of risk dichotomisation.
+This issue can be particularly prevalent in acutely deteriorating inpatients. Many early warning scores for clinical deterioration apply risk strata to both predictors and predictions, leading to tools like the Modified Early Warning Score (MEWS) which scores patients from 0 to 3 in increasing order of risk of adverse events. [@Fullerton2012] The National Early Warning Score 2 (NEWS2) used by the National Health Service uses a wider variety of thresholds, scoring patients from 0 to 20 but considers all scores above 7 to be high risk requiring immediate review, effectively treating all patients above 7 to be of relatively equal importance. [@Scott2022] While 20 risk groups can lead to more nuanced interpretation than just 2 or 4, this often remains insufficient for clinical practice when individualised risk predictions are available, supporting more nuanced decision making. Nurses are often required to modify or 'individualize' the patient's score to lead to efficient resource allocation, due to strict response protocols for each threshold. [@Langkjaer2021]
+
+We hypothesise that ranking, which retains the continuous scale of predictions and prioritises individuals based on their predicted risk, can be more cost-effective than thresholds. Prediction models are capable of generating important outcome data that are discarded when grouping patients into broad risk categories, as all high-risk patients are considered equal.
+
+This issue has previously been raised in prediction model research in other contexts. Royston et al (2005) demonstrate the consequences of dichotomising continuous predictor variables, or the variables used by the model to generate predicted risks. Dichotomising can be attractive due to its simplicity, but sacrifices considerable statistical power and can lead to both biased estimates and overly narrow estimates of variance. [@Royston2006] Wynants et al (2019) highlight that the use of risk thresholds can lead to severely impaired decision-making for several reasons, including equal weighting for false positives and false negatives, and an inability to consider the preferences of both patients and clinicians. [@Wynants2019] However, prior research has not yet considered the impact of alternatives to threshold selection when a large number of patients must be evaluated simultaneously, for example when prioritising patients for clinical review, and the potential consequences of misclassification in this context.
+
+This simulation study compares a ranking-based approach to a threshold-based approach to determine the potential benefits of prioritising patients based on continuous risk scores.
+
+![Ranking patients by predicted risk can lead to a consistent order in which they are seen, determined by their predicted risk. Threshold-based methods can lead to a random order of evaluation that ignores the nuance of risk predictions.](Ranking v threshold.jpg){fig-alt="A table that demonstrates how ranking can lead to a consistent order of evaluation based on predicted probabilities when compared to threshold-based approaches."}
 
 ## Study outline
 
@@ -32,9 +40,9 @@ This study compares a ranking-based approach to a threshold based approach both 
 
 ## Methods
 
-Let's assume that, left unassessed, a deteriorating medical inpatient will need to be rapidly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate that decision to an outreach team, in this case comprising of an ICU registrar, the patient's attending, and the patient's nurse.
+Let's assume that, left unassessed, a deteriorating medical inpatient will need to be rapidly transferred to the ICU, which incurs significant additional costs. A deterioration detection system can escalate that decision to an outreach team, in this case comprising of an ICU registrar, the patient's attending clinician, and the patient's nurse.
 
-False positives can lead to wasted clinician time, and false negatives can lead to costly ICU admissions. Considering that many patients will require ICU admission regardless of whether they can be successfully intervened upon, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
+False positives lead to wasted clinician time, and false negatives can lead to costly ICU admissions. Considering that many patients will require ICU admission regardless of whether they can be successfully intervened upon, we should estimate a conservative treatment effect for assessment, rather than assuming an early intervention will necessarily be preventative.
 
 ### Set up experiment
 
@@ -90,7 +98,7 @@ sample_pop$predicted <- predict(fit, type = "response")
 #### Parameters
 
 -   Additional costs due to deterioration
-    -   The additional utilisation cost of deterioration is \~𝒩(14134, 686) [@Curtis2021]
+    -   The additional cost of deterioration is \~𝒩(14134, 686) [@Curtis2021]
     -   This cost is in addition to a clinical ICU assessment (see below)
 -   Cost of clinical time per minute based on ICU outreach registrar, the resident medical officer, and the patient's nurse [@Bohingamu2024]
     -   ICU outreach registrar hourly: 69.91/60 \* (1.03)\^(2024 - 2016) = 1.48
@@ -101,10 +109,10 @@ sample_pop$predicted <- predict(fit, type = "response")
     -   Note that this was converted to a Gamma distribution based on a mean duration of 19 minutes and a standard error of 18/√99 = 1.809 minutes using ShinyPrior [@white2023]
 -   Effect of alert on ICU admission rate (hazard ratio) \~𝒩(0.910, 0.036) [@Escobar2020]
     -   Note: must be taken as (1 - HR) for sampler
--   QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
--   Opportunity cost of a positive alert = probability patient can be successfully treated \* underlying prevalence of event \* cost of outcome avoided if successfully treated (i.e., if the clinicians were doing something more productive with their time)
+-   Average QALYs lost from deterioration episode \~𝒩(0.03, 0.04) [@Holmes2024]
+-   Opportunity cost of a positive alert = probability another patient could have been successfully treated \* underlying prevalence of event \* cost of outcome avoided if successfully treated (i.e., if the clinicians were doing something more productive with their time)
 
-##### Fixed
+##### Fixed estimates for threshold selection
 
 ```{r}
 fx_nmb <- get_nmb_sampler(
@@ -119,28 +127,6 @@ fx_nmb <- get_nmb_sampler(
   # Chance of successful intervention
   high_risk_group_treatment_effect = 1 - 0.910
 )
-```
-
-##### Stochastic:
-
-```{r}
-# Need to make a wrapper as the same estimates should be used for multiple cells
-sampler <- function() {
-  cost_outcome <- rnorm(1, 14134, 686)
-  eff_outcome <- 1 - rnorm(1, 0.910, 0.036)
-  
-  fx_nmb_sampler <- get_nmb_sampler(
-    outcome_cost = cost_outcome,
-    wtp = wtp,
-    qalys_lost = function() rnorm(1, 0.03, 0.04),
-    high_risk_group_treatment_cost =
-      function() rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
-      (p0 * eff_outcome * cost_outcome),
-    high_risk_group_treatment_effect = eff_outcome
-  )
-  
-  fx_nmb_sampler()
-}
 ```
 
 ## Derive cutpoints
@@ -166,6 +152,8 @@ cutpoint_nmb <- median(nmb_simulation$df_thresholds$value_optimising)
 remove(nmb_simulation)
 ```
 
+The thresholds derived from our NMB and Youden index approaches are `r round(cutpoint_nmb, 3)` and `r round(cutpoint_youden, 3)`, respectively.
+
 ### PPV-based threshold
 
 A recent consideration with regards to implementing thresholds for risk stratification has been to limit the number of alerts based on what clinicians will tolerate, using the positive predictive value (PPV) to determine number needed to evaluate (NNE).[@romero-brufau2015] For example, a model with a PPV of 0.1 corresponds to a rate of 1 positive per 10 alerts, or a NNE of 10. This approach can be considered in addition to other, ROC or value-based methods. [@Parsons2023]
@@ -188,9 +176,11 @@ cutpoint_nne <- min(ppv$threshold[ppv$nne == nne], na.rm = T)
 remove(roc_curve, ppv, sample_pop)
 ```
 
+The threshold derived from the number needed to evaluate method is `r round(cutpoint_nmb, 3)`.
+
 ## Obtain predictions for variety of external validation scenarios
 
-By repeating the sample population simulation step for a selection of prevalence and AUC values, we can mimic an external validation study by fitting the original model to these external settings.
+By repeating the sample population simulation step for a selection of prevalence and AUC values, we can mimic an external validation study across a variety of external settings, using the original model predictors derived from the initial parameterisation.
 
 ```{r}
 combs <- expand.grid(
@@ -206,12 +196,13 @@ sims <- map2(.x = combs$auc, .y = combs$p0,
                auc = x,
                p0 = y)
 )
+combs
 remove(combs)
 ```
 
 ### Apply cutpoints to classify predictions
 
-We can now simulate an external validation study under a variety of conditions based on a range of AUC and prevalence values. This mimics a scenario in which we take the original model, developed under the conditions of AUC = 0.85 and p0 of 0.05, and apply the predictions to other datasets, also created using the get_sample() function.
+We can now simulate an external validation study under a variety of conditions based on a range of AUC and prevalence values. This mimics a scenario in which we take the original model, developed under the conditions of AUC = `r auc` and p0 of `r p0`, and apply the predictions to other datasets, also created using the get_sample() function.
 
 ```{r}
 source("./utils.R")
@@ -226,23 +217,25 @@ remove(sims)
 
 ### Obtain NMB of each strategy
 
-We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). However, as the thresholds were drawn using all the data, they may not be suitable when extrapolating to other scenarios, for example a future patient population. In practice, we may often see that a threshold can identify many patients at risk, but we can only see a small number of these patients based on resource constraints (e.g., clinical time). We can use the risk predictions to prioritise patients (ranking), or we can just randomly select positive cases.
+We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). However, as the thresholds were drawn using all the data, they may not be suitable when extrapolating to other scenarios, for example a future patient population. In practice, we may often see that a threshold can identify many patients at risk, but we can only see a small number of these patients based on resource constraints (e.g., clinical time).
 
-We can simulate this by taking random draws of e.g. 40 patients with a positive prediction for each threshold method. We can then compare this to a ranking approach where we sort by predicted risk and take the top 40.
+We can use the risk predictions to prioritise patients (ranking), or we can just randomly select positive cases, which is what clinicians may be forced to do when there are many patients who may be deteriorating, but few who can be seen within the recommended timeframe while balancing other tasks.
+
+We can simulate this process by taking random draws. In a large hospital, you may have e.g. 40 patients with a positive prediction for a given threshold. We compare the two approaches by selecting 40 random patients above the threshold and 40 patients sorted by predicted risks.
 
 Method:
 
 1.  For each AUC and prevalence, take 40 random draws for positive cases from each threshold method (NMB, NNE, Youden)
-2.  Take the top 40 patients by predicted risk.
+2.  Compare these patients to the top 40 patients by predicted risk, which does not vary.
 3.  Compare the positive predictive value by assigning outcomes (TP, FP, TN, FN) to each patient
 4.  Repeat steps 1:3 B times for uncertainty estimates
 
-Note: The issue this whole time was that by identifying more false positives, it actually makes the model look way worse. True positives are way more expensive than false positives, so the method was actually incentivising finding false positives. We actually want the false positives to be true negatives. Using NMB was not the right approach here.
-
 ```{r, message = FALSE}
+# Set up simulation to run 1000 times
 n_samples = 40
+max_iter = 1000
 sim_results <- list()
-for (i in 1:1000){
+for (i in 1:max_iter){
   df_youden <- obtain_sample(df_sims, "class_youden", n_samples)
   df_nne <- obtain_sample(df_sims, "class_nne", n_samples)
   df_val_opt <- obtain_sample(df_sims, "class_val_opt", n_samples)
@@ -260,8 +253,10 @@ for (i in 1:1000){
     mutate(Outcome = ifelse(actual == 1, "TP", "FP"),
            Cost = ifelse(
              Outcome == "FP",
+             # Opportunity cost of a false positive (see methods section)
              rgamma(1, shape = 110.314, scale = 0.172) * 3.19 + 
                (p0 * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686)),
+             # No cost for true positives (for now)
              0),
            iter = i)
   
@@ -270,8 +265,14 @@ for (i in 1:1000){
 }
 
 results <- do.call(rbind, sim_results)
-results$TP_rate <- ifelse(results$Outcome == "TP", 1, 0)
+head(results, 15)
+```
 
+We now have simulations for each starting scenario (`r n_samples` samples for each AUC, prevalence, and threshold selection method over `r max_iter` bootstrap iterations).
+
+```{r, message = FALSE}
+# Summarise results for each level of AUC and prevalence
+results$TP_rate <- ifelse(results$Outcome == "TP", 1, 0)
 results <- results |>
   group_by(Method, auc, p0, iter) |>
   summarise(PPV = mean(TP_rate),
@@ -291,7 +292,11 @@ results <- results |>
     Method == "youden" ~ "Youden index threshold",
     Method == "ranking" ~ "Ranking by predicted risk"
   ))
+head(results, 10)
+```
 
+```{r, message = FALSE}
+# Create plots
 p0_values <- c(`0.01` = "Prevalence = 0.01",
                `0.05` = "Prevalence = 0.05",
                `0.1` = "Prevalence = 0.10")
@@ -330,7 +335,7 @@ p_costs +
                      breaks = seq(0.65, 0.95, 0.1), 
                      name = "Model AUC") +
   scale_y_continuous(breaks = seq(25, 200, 25), 
-                     name = "Cost of false positives")
+                     name = "Mean misclassification cost per patient")
 
 ggsave(filename = "Cost_results.png", height = 6, width = 10)
 ```
