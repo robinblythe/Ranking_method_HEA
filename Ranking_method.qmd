@@ -8,9 +8,11 @@ bibliography: references.bib
 
 ## Background
 
-This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. In clinical prediction model implementation, a threshold refers to a predicted value above which the patient is deemed high risk, and below which they are deemed low risk. This can be convenient to implement as patients can be dichotomised into few risk categories, however in some clinical settings including acute or emergency care, some patients must be evaluated more urgently than others, and there may be too many high risk patients to evaluate in a timely manner.
+This project is an exploratory study to determine whether ranking patients by predicted risk can yield lower costs and better outcomes than using thresholds from a hospital perspective. In clinical prediction model implementation, a threshold refers to a predicted value above which the patient is deemed high risk, and below which they are deemed low risk. This can be convenient to implement, as patients can be dichotomised into few risk categories, often with clear recommendations for clinical actions tied to different risk groups.
 
-This issue can be particularly prevalent in acutely deteriorating inpatients. Many early warning scores for clinical deterioration apply risk strata to both predictors and predictions, leading to tools like the Modified Early Warning Score (MEWS) which scores patients from 0 to 3 in increasing order of risk of adverse events. [@Fullerton2012] The National Early Warning Score 2 (NEWS2) used by the National Health Service uses a wider variety of thresholds, scoring patients from 0 to 20 but considers all scores above 7 to be high risk requiring immediate review, effectively treating all patients above 7 to be of relatively equal importance. [@Scott2022] While 20 risk groups can lead to more nuanced interpretation than just 2 or 4, this often remains insufficient for clinical practice when individualised risk predictions are available, supporting more nuanced decision making. Nurses are often required to modify or 'individualize' the patient's score to lead to efficient resource allocation, due to strict response protocols for each threshold. [@Langkjaer2021]
+However, in some clinical settings including acute or emergency care, some patients must be evaluated more urgently than others, and there may be too many high risk patients to evaluate in a timely manner.
+
+This issue can be particularly prevalent in acutely deteriorating inpatients. Many early warning scores for clinical deterioration apply risk strata to both predictors and predictions, leading to tools like the Modified Early Warning Score (MEWS) which scores patients from 0 to 3 in increasing order of risk of adverse events. [@Fullerton2012] The National Early Warning Score 2 (NEWS2) used by the National Health Service uses a wider variety of thresholds, scoring patients from 0 to 20 but considers all scores above 7 to be high risk requiring immediate review, effectively reducing the number of strata as many are considered to be of relatively equal importance. [@Scott2022] While 20 risk groups can lead to more nuanced interpretation than just 2 or 4, this often remains insufficient for clinical practice when individualised risk predictions are available, supporting more nuanced decision making. Nurses are often required to modify or 'individualize' the patient's score to lead to efficient resource allocation, due to strict response protocols for each threshold. [@Langkjaer2021]
 
 We hypothesise that ranking, which retains the continuous scale of predictions and prioritises individuals based on their predicted risk, can be more cost-effective than thresholds. Prediction models are capable of generating important outcome data that are discarded when grouping patients into broad risk categories, as all high-risk patients are considered equal.
 
@@ -18,7 +20,7 @@ This issue has previously been raised in prediction model research in other cont
 
 This simulation study compares a ranking-based approach to a threshold-based approach to determine the potential benefits of prioritising patients based on continuous risk scores.
 
-![Ranking patients by predicted risk can lead to a consistent order in which they are seen, determined by their predicted risk. Threshold-based methods can lead to a random order of evaluation that ignores the nuance of risk predictions.](Ranking v threshold.jpg){fig-alt="A table that demonstrates how ranking can lead to a consistent order of evaluation based on predicted probabilities when compared to threshold-based approaches."}
+![Ranking patients by predicted risk can lead to a consistent order in which they are seen, determined by their predicted risk. Threshold-based methods can lead to a random order of evaluation that ignores the nuance of risk predictions.](Ranking%20v%20threshold.jpg){fig-alt="A table that demonstrates how ranking can lead to a consistent order of evaluation based on predicted probabilities when compared to threshold-based approaches." width="787"}
 
 ## Study outline
 
@@ -180,7 +182,7 @@ The threshold derived from the number needed to evaluate method is `r round(cutp
 
 ## Obtain predictions for variety of external validation scenarios
 
-By repeating the sample population simulation step for a selection of prevalence and AUC values, we can mimic an external validation study across a variety of external settings, using the original model predictors derived from the initial parameterisation.
+By repeating the sample population simulation step for a selection of prevalence and AUC values, we can mimic external validation across a variety of external settings, using the original model equation derived from the initial parameterisation.
 
 ```{r}
 combs <- expand.grid(
@@ -217,9 +219,9 @@ remove(sims)
 
 ### Obtain NMB of each strategy
 
-We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). However, as the thresholds were drawn using all the data, they may not be suitable when extrapolating to other scenarios, for example a future patient population. In practice, we may often see that a threshold can identify many patients at risk, but we can only see a small number of these patients based on resource constraints (e.g., clinical time).
+We now have a set of randomly drawn datasets, predictions, and classifications (treat or do not treat). However, as the thresholds were drawn using all the data, they may not be suitable when extrapolating to other scenarios, for example a future patient population. In practice, we may often see that a threshold can identify many patients at risk, but we can only see a small number of these patients based on resource constraints (e.g., clinical time), or we don't see enough patients when resources are available (slow periods). Both are inefficient.
 
-We can use the risk predictions to prioritise patients (ranking), or we can just randomly select positive cases, which is what clinicians may be forced to do when there are many patients who may be deteriorating, but few who can be seen within the recommended timeframe while balancing other tasks.
+We can use the risk predictions to prioritise patients (ranking), or we can just randomly select positive cases. Semi-random selection of positive cases is possibly more common than ranked approaches, especially when there is insufficient communication between clinical staff, who may not be able to differentiate between high risk patients without laying eyes on each. Many patients may be deteriorating, but few can be seen within the recommended timeframe while balancing other tasks.
 
 We can simulate this process by taking random draws. In a large hospital, you may have e.g. 40 patients with a positive prediction for a given threshold. We compare the two approaches by selecting 40 random patients above the threshold and 40 patients sorted by predicted risks.
 
@@ -338,4 +340,42 @@ p_costs +
                      name = "Mean misclassification cost per patient")
 
 ggsave(filename = "Cost_results.png", height = 6, width = 10)
+```
+
+## Classify Singaporean ED data using thresholds
+
+To use a worked example, we can take real ED data from Singapore and a predictive model for mortality, SERP. We load the data, fit a logistic regression to assign probabilities to the SERP scores (\~61 unique levels in our data), then run the threshold estimation process on this.
+
+```{r}
+# Load data
+df_ed <- readRDS(file = "C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+
+# Data contains 61 unique values. Not quite 100, but not bad. Need to convert to probabilities for predictNMB to work:
+fit_serp <- glm(
+  outcome_mortality_2d ~ pred_risk,
+  data = df_ed,
+  family = binomial()
+)
+
+# Obtain costs and outcomes of classification
+# Should probably get a proper Singaporean dataset/example together. These are too retrofitted to the US example
+fx_nmb_serp <- get_nmb_sampler(
+  # Cost of unnecessary ICU admission
+  outcome_cost = 14134,
+  # Willingness to pay per QALY - Singapore
+  wtp = 36000,
+  # QALYs lost due to deterioration event
+  qalys_lost = 0.03,
+  # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
+  high_risk_group_treatment_cost = (3.19 * 19) + ((1 - 0.910) * 14134 * p0),
+  # Chance of successful intervention
+  high_risk_group_treatment_effect = 1 - 0.910
+)
+
+# Apply thresholds
+serp_thresholds <- get_thresholds(
+  predicted = df_ed$pred_risk,
+  actual = df_ed$outcome_mortality_2d,
+  nmb = fx_nmb_serp()
+)
 ```
