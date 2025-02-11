@@ -58,7 +58,7 @@ library(tidyverse)
 auc = 0.85
 params = 30
 p0 = 0.05
-wtp = ceiling(28033*(1.03)^(2024 - 2018))
+wtp = 50000
 
 # Obtain minimum sample size/events
 pmsamp <- pmsampsize::pmsampsize(
@@ -100,7 +100,7 @@ sample_pop$predicted <- predict(fit, type = "response")
 #### Parameters
 
 -   Additional costs due to deterioration
-    -   The additional cost of deterioration is \~𝒩(14134, 686) [@Curtis2021]
+    -   The additional cost of deterioration is \~𝒩(14134, 686) [@Curtis2021] (\$AUD)
     -   This cost is in addition to a clinical ICU assessment (see below)
 -   Cost of clinical time per minute based on ICU outreach registrar, the resident medical officer, and the patient's nurse [@Bohingamu2024]
     -   ICU outreach registrar hourly: 69.91/60 \* (1.03)\^(2024 - 2016) = 1.48
@@ -350,32 +350,81 @@ To use a worked example, we can take real ED data from Singapore and a predictiv
 # Load data
 df_ed <- readRDS(file = "C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
 
+# Double check AUC
+auc(response = df_ed$outcome, predictor = df_ed$pred_risk)
+
 # Data contains 61 unique values. Not quite 100, but not bad. Need to convert to probabilities for predictNMB to work:
 fit_serp <- glm(
-  outcome_mortality_2d ~ pred_risk,
+  outcome ~ pred_risk,
   data = df_ed,
   family = binomial()
 )
+
+df_ed$pred_prob <- predict(fit_serp, type = "response")
 
 # Obtain costs and outcomes of classification
 # Should probably get a proper Singaporean dataset/example together. These are too retrofitted to the US example
 fx_nmb_serp <- get_nmb_sampler(
   # Cost of unnecessary ICU admission
-  outcome_cost = 14134,
+  outcome_cost = 12015 * (1.03)^(2025 - 2021),
   # Willingness to pay per QALY - Singapore
-  wtp = 36000,
+  wtp = 50000,
   # QALYs lost due to deterioration event
   qalys_lost = 0.03,
-  # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-  high_risk_group_treatment_cost = (3.19 * 19) + ((1 - 0.910) * 14134 * p0),
+  # Cost of an evaluation = (Clinician time cost * duration of MET * AUD to SGD conversion rate) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
+  high_risk_group_treatment_cost = (3.19 * 19 * 0.85) + ((1 - 0.910) * 12015 * (1.03)^(2025 - 2021) * p0),
   # Chance of successful intervention
   high_risk_group_treatment_effect = 1 - 0.910
 )
 
 # Apply thresholds
 serp_thresholds <- get_thresholds(
-  predicted = df_ed$pred_risk,
-  actual = df_ed$outcome_mortality_2d,
+  predicted = df_ed$pred_prob,
+  actual = df_ed$outcome,
   nmb = fx_nmb_serp()
 )
+
+# Get probability thresholds
+serp_nmb <- serp_thresholds[["value_optimising"]]
+serp_youden <- serp_thresholds[["youden"]]
+# Convert back to SERP values
+prob_table <- data.frame(pred_risk = seq(1, 100, 1))
+prob_table$pred_prob <- predict(fit_serp, type = "response", newdata = prob_table)
+cutpoint_serp_nmb <- prob_table$pred_risk[prob_table$pred_prob == serp_nmb]
+cutpoint_serp_youden <- prob_table$pred_risk[prob_table$pred_prob == serp_youden]
+remove(serp_thresholds, fit_serp)
+
+# Add PPV threshold
+roc_curve <- roc(response = df_ed$outcome, predictor = df_ed$pred_risk)
+ppv <- coords(
+  roc_curve, 
+  x = "all", 
+  input = "threshold", 
+  ret = c("threshold", "ppv")
+  )
+
+# NNE = 1/PPV
+ppv$nne <- 1/ppv$ppv
+cutpoint_serp_nne <- floor(min(ppv$threshold[ppv$nne == nne], na.rm = T))
+remove(roc_curve, ppv)
+```
+
+## Worked example results
+
+Now that we have data from a real example, we can estimate the results as per the simulation above. Assuming the SGH ED sees 300 patients per day, there may be n patients there at peak time. If n = 50, we can take a random sample of 50 patients and compare the PPV and opportunity costs of applying SERP with thresholds and with ranking.
+
+```{r}
+df_ed$class_val_opt <- ifelse(df_ed$pred_risk >= cutpoint_serp_nmb, 1, 0)
+df_ed$class_nne <- ifelse(df_ed$pred_risk >= cutpoint_serp_nne, 1, 0)
+df_ed$class_youden <- ifelse(df_ed$pred_risk >= cutpoint_serp_youden, 1, 0)
+
+n_samples <- 50
+max_iter <- 1000
+
+serp_results <- list()
+for (i in 1:max_iter) {
+  serp_results[[i]] <- sample(df_ed, size = n_samples)
+}
+
+
 ```

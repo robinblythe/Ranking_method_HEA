@@ -6,8 +6,9 @@ library(tidyverse)
 df_ed_raw <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/data_all_temp2022.11.18.RDS")
 df_ed <- df_ed_raw |>
   filter(REGISTRATION_DATE >= "2017-01-01") |>
-  mutate(ID = row_number()) |>
-  select(ID, AGE, PULSE, RESPIRATION, BPSYSTOLIC, BPDIASTOLIC, AllCancer, outcome_mortality_2d) |>
+  mutate(ID = row_number(),
+         outcome = ifelse(outcome_mortality_2d == TRUE, 1, 0)) |>
+  select(ID, AGE, PULSE, RESPIRATION, BPSYSTOLIC, BPDIASTOLIC, AllCancer, outcome) |>
   rowwise() |>
   mutate(pred_risk = sum(
     case_when(AGE < 30 ~ 0,
@@ -32,9 +33,8 @@ df_ed <- df_ed_raw |>
     case_when(AllCancer == "0no" ~ 0,
               AllCancer == "1local" ~ 6,
               AllCancer == "2metastatic" ~ 14)
-    ),
-    outcome = ifelse(outcome_mortality_2d == TRUE, 1, 0)) |>
+    )) |>
   na.omit()
 
 saveRDS(df_ed, file = "C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
-
+remove(df_ed_raw)
