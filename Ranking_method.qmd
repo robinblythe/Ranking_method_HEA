@@ -198,7 +198,6 @@ sims <- map2(.x = combs$auc, .y = combs$p0,
                auc = x,
                p0 = y)
 )
-combs
 remove(combs)
 ```
 
@@ -227,7 +226,7 @@ We can simulate this process by taking random draws. In a large hospital, you ma
 
 Method:
 
-1.  For each AUC and prevalence, take 40 random draws for positive cases from each threshold method (NMB, NNE, Youden)
+1.  For each AUC and prevalence, take 40 random draws for positive predictions from each threshold method (NMB, NNE, Youden)
 2.  Compare these patients to the top 40 patients by predicted risk, which does not vary.
 3.  Compare the positive predictive value by assigning outcomes (TP, FP, TN, FN) to each patient
 4.  Repeat steps 1:3 B times for uncertainty estimates
@@ -235,7 +234,7 @@ Method:
 ```{r, message = FALSE}
 # Set up simulation to run 1000 times
 n_samples = 40
-max_iter = 1000
+max_iter = 10000
 sim_results <- list()
 for (i in 1:max_iter){
   df_youden <- obtain_sample(df_sims, "class_youden", n_samples)
@@ -267,7 +266,6 @@ for (i in 1:max_iter){
 }
 
 results <- do.call(rbind, sim_results)
-head(results, 15)
 ```
 
 We now have simulations for each starting scenario (`r n_samples` samples for each AUC, prevalence, and threshold selection method over `r max_iter` bootstrap iterations).
@@ -294,7 +292,7 @@ results <- results |>
     Method == "youden" ~ "Youden index threshold",
     Method == "ranking" ~ "Ranking by predicted risk"
   ))
-head(results, 10)
+
 ```
 
 ```{r, message = FALSE}
@@ -340,91 +338,180 @@ p_costs +
                      name = "Mean misclassification cost per patient")
 
 ggsave(filename = "Cost_results.png", height = 6, width = 10)
+
+rm(list = ls(all.names = TRUE))
+gc()
 ```
 
 ## Classify Singaporean ED data using thresholds
 
 To use a worked example, we can take real ED data from Singapore and a predictive model for mortality, SERP. We load the data, fit a logistic regression to assign probabilities to the SERP scores (\~61 unique levels in our data), then run the threshold estimation process on this.
 
-```{r}
+### Get thresholds
+
+```{r, message = FALSE}
 # Load data
-df_ed <- readRDS(file = "C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
 
-# Double check AUC
-auc(response = df_ed$outcome, predictor = df_ed$pred_risk)
-
-# Data contains 61 unique values. Not quite 100, but not bad. Need to convert to probabilities for predictNMB to work:
-fit_serp <- glm(
-  outcome ~ pred_risk,
-  data = df_ed,
-  family = binomial()
+# Obtain thresholds from https://www.nature.com/articles/s41598-022-22233-w#Tab3
+library(pROC)
+serp_roc <- roc(response = df_ed$outcome_died_30d, predictor = df_ed$pred_risk)
+cutpoint_serp <- coords(
+  roc = serp_roc,
+  x = "all",
+  input = "threshold",
+  ret = c("threshold", "specificity", "ppv")
 )
 
-df_ed$pred_prob <- predict(fit_serp, type = "response")
+# Inspect serp_roc to find thresholds
+threshold_spec_70 <- 24
+threshold_spec_80 <- 27
+threshold_spec_90 <- 31
 
-# Obtain costs and outcomes of classification
-# Should probably get a proper Singaporean dataset/example together. These are too retrofitted to the US example
-fx_nmb_serp <- get_nmb_sampler(
-  # Cost of unnecessary ICU admission
-  outcome_cost = 12015 * (1.03)^(2025 - 2021),
-  # Willingness to pay per QALY - Singapore
-  wtp = 50000,
-  # QALYs lost due to deterioration event
-  qalys_lost = 0.03,
-  # Cost of an evaluation = (Clinician time cost * duration of MET * AUD to SGD conversion rate) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-  high_risk_group_treatment_cost = (3.19 * 19 * 0.85) + ((1 - 0.910) * 12015 * (1.03)^(2025 - 2021) * p0),
-  # Chance of successful intervention
-  high_risk_group_treatment_effect = 1 - 0.910
-)
-
-# Apply thresholds
-serp_thresholds <- get_thresholds(
-  predicted = df_ed$pred_prob,
-  actual = df_ed$outcome,
-  nmb = fx_nmb_serp()
-)
-
-# Get probability thresholds
-serp_nmb <- serp_thresholds[["value_optimising"]]
-serp_youden <- serp_thresholds[["youden"]]
-# Convert back to SERP values
-prob_table <- data.frame(pred_risk = seq(1, 100, 1))
-prob_table$pred_prob <- predict(fit_serp, type = "response", newdata = prob_table)
-cutpoint_serp_nmb <- prob_table$pred_risk[prob_table$pred_prob == serp_nmb]
-cutpoint_serp_youden <- prob_table$pred_risk[prob_table$pred_prob == serp_youden]
-remove(serp_thresholds, fit_serp)
-
-# Add PPV threshold
-roc_curve <- roc(response = df_ed$outcome, predictor = df_ed$pred_risk)
-ppv <- coords(
-  roc_curve, 
-  x = "all", 
-  input = "threshold", 
-  ret = c("threshold", "ppv")
-  )
-
-# NNE = 1/PPV
-ppv$nne <- 1/ppv$ppv
-cutpoint_serp_nne <- floor(min(ppv$threshold[ppv$nne == nne], na.rm = T))
-remove(roc_curve, ppv)
+remove(serp_roc, cutpoint_serp)
 ```
 
-## Worked example results
+### Results
 
-Now that we have data from a real example, we can estimate the results as per the simulation above. Assuming the SGH ED sees 300 patients per day, there may be n patients there at peak time. If n = 50, we can take a random sample of 50 patients and compare the PPV and opportunity costs of applying SERP with thresholds and with ranking.
+Now that we have data from a real example, we can estimate the results as per the simulation above. Assuming the SGH ED sees 50 patients at any given time. The analysis from the simulation can be repeated; in a situation where a doctor asks for a consult, we can simulate the effect of assessing patients ranked by predicted risk, vs assessing all patients above the threshold (as per the external validation study above).
 
 ```{r}
-df_ed$class_val_opt <- ifelse(df_ed$pred_risk >= cutpoint_serp_nmb, 1, 0)
-df_ed$class_nne <- ifelse(df_ed$pred_risk >= cutpoint_serp_nne, 1, 0)
-df_ed$class_youden <- ifelse(df_ed$pred_risk >= cutpoint_serp_youden, 1, 0)
+# In this scenario, deterioration leads to ICU admission
+df_ed <- df_ed |>
+  mutate(
+    t1 = ifelse(pred_risk >= threshold_spec_70, 1, 0),
+    t2 = ifelse(pred_risk >= threshold_spec_80, 1, 0),
+    t3 = ifelse(pred_risk >= threshold_spec_90, 1, 0),
+    class_t1 = case_when(
+      t1 == 1 & outcome_icu == 1 ~ "TP",
+      t1 == 1 & outcome_icu == 0 ~ "FP",
+      t1 == 0 & outcome_icu == 1 ~ "FN",
+      t1 == 0 & outcome_icu == 0 ~ "TN"
+    ),
+    class_t2 = case_when(
+      t2 == 1 & outcome_icu == 1 ~ "TP",
+      t2 == 1 & outcome_icu == 0 ~ "FP",
+      t2 == 0 & outcome_icu == 1 ~ "FN",
+      t2 == 0 & outcome_icu == 0 ~ "TN"
+    ),
+    class_t3 = case_when(
+      t3 == 1 & outcome_icu == 1 ~ "TP",
+      t3 == 1 & outcome_icu == 0 ~ "FP",
+      t3 == 0 & outcome_icu == 1 ~ "FN",
+      t3 == 0 & outcome_icu == 0 ~ "TN"
+    )
+  )
 
-n_samples <- 50
-max_iter <- 1000
 
-serp_results <- list()
+```
+
+### Approach 1: repeat the simulated analysis
+
+Assuming 100 patients at any given time are being assessed in ED
+
+```{r}
+# Set up bootstrap resampler
+n_samples = 100
+n_eval = 0.2 * n_samples
+max_iter = 10000
+results_out <- list()
+
+# 1. Obtain random set
+# 2. Extract all positive cases under each threshold (0.7, 0.8, 0.9)
+# 3. Summarise PPV and misclassification costs using ranking vs under a random sample
+set.seed(888)
 for (i in 1:max_iter) {
-  serp_results[[i]] <- sample(df_ed, size = n_samples)
+
+  # Sample from data
+  df = df_ed[sample(nrow(df_ed), n_samples),] |>
+    arrange(desc(pred_risk))
+  
+  # Take (n_eval) random draws vs 5 ranking-based draws
+  df_7 = subset(df, t1 == 1) |> slice_sample(n = n_eval) |> 
+    mutate(Method = "t1 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  df_8 = subset(df, t2 == 1) |> slice_sample(n = n_eval) |> 
+    mutate(Method = "t2 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  df_9 = subset(df, t3 == 1) |> slice_sample(n = n_eval) |> 
+    mutate(Method = "t3 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  df_7_rank = subset(df, t1 == 1) |> slice_head(n = n_eval) |> 
+    mutate(Method = "t1 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  df_8_rank = subset(df, t2 == 1) |> slice_head(n = n_eval) |> 
+    mutate(Method = "t2 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  df_9_rank = subset(df, t3 == 1) |> slice_head(n = n_eval) |> 
+    mutate(Method = "t3 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
+  
+  results_out[[i]] <- do.call(rbind, list(df_7, df_8, df_9, df_7_rank, df_8_rank, df_9_rank))
 }
 
+serp_results <- do.call(rbind, results_out)
+serp_results$Cost <- if_else(serp_results$TP == 0, 
+                             rgamma(nrow(serp_results), shape = 110.314, scale = 0.172) * (3.19 * 0.85), 
+                             0)
 
+# Results are for only a small period of the day; extrapolate to annual
+
+```
+
+### Approach 2: Try something different (rank vs threshold)
+
+In addition to repeating the simulation results (as per above), we can also see what happens if we use a ranking approach instead of thresholds. The intention here is to check whether ranking by predicted risks leads to lower misclassification costs and better PPV based on the number of patients evaluated (x-axis). This can be compared to threshold costs.
+
+```{r}
+n_samples = 50
+wtp = 50000
+ranking_out <- list()
+
+set.seed(888)
+for (i in 1:max_iter) {
+  
+  FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)
+  FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))
+
+  # Sample from data
+  df = df_ed[sample(nrow(df_ed), n_samples),] |>
+    arrange(desc(pred_risk))
+  
+  ranking_out[[i]] <- tibble(
+    iter = rep(i, 7),
+    Method = c(
+      "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"
+    ),
+    Mean_cost = c(
+      (5 - sum(df[1:5,]$outcome_icu)) * FP +
+        sum(df[6:n_samples,]$outcome_icu) * FN,
+      (10 - sum(df[1:10,]$outcome_icu)) * FP +
+        sum(df[11:n_samples,]$outcome_icu) * FN,
+      (15 - sum(df[1:15,]$outcome_icu)) * FP +
+        sum(df[16:n_samples,]$outcome_icu) * FN,
+      (20 - sum(df[1:20,]$outcome_icu)) * FP +
+        sum(df[21:n_samples,]$outcome_icu) * FN,
+      sum(df$class_t1 == "FP") * FP +
+        sum(df$class_t1 == "FN") * FN,
+      sum(df$class_t2 == "FP") * FP +
+        sum(df$class_t2 == "FN") * FN,
+      sum(df$class_t3 == "FP") * FP +
+        sum(df$class_t3 == "FN") * FN
+    ),
+    Mean_PPV = c(
+      mean(df[1:5,]$outcome_icu),
+      mean(df[1:10,]$outcome_icu),
+      mean(df[1:15,]$outcome_icu),
+      mean(df[1:20,]$outcome_icu),
+      sum(df$class_t1 == "TP")/sum(df$t1),
+      sum(df$class_t2 == "TP")/sum(df$t2),
+      sum(df$class_t3 == "TP")/sum(df$t3)
+      )
+  )
+}
+
+rank_results <- do.call(rbind, ranking_out)
+rank_summary <- rank_results |>
+  na.omit() |>
+  group_by(Method) |>
+  summarise(Cost = median(Mean_cost),
+            Cost_low = quantile(Mean_cost, 0.025),
+            Cost_high = quantile(Mean_cost, 0.975),
+            PPV = median(Mean_PPV),
+            PPV_low = quantile(Mean_PPV, 0.025),
+            PPV_high = quantile(Mean_PPV, 0.975))
 ```
