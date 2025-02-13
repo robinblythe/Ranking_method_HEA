@@ -351,7 +351,8 @@ To use a worked example, we can take real ED data from Singapore and a predictiv
 
 ```{r, message = FALSE}
 # Load data
-df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS") # home laptop
+df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS") # work laptop
 
 # Obtain thresholds from https://www.nature.com/articles/s41598-022-22233-w#Tab3
 library(pROC)
@@ -368,15 +369,8 @@ threshold_spec_70 <- 24
 threshold_spec_80 <- 27
 threshold_spec_90 <- 31
 
-remove(serp_roc, cutpoint_serp)
-```
-
-### Results
-
-Now that we have data from a real example, we can estimate the results as per the simulation above. Assuming the SGH ED sees 50 patients at any given time. The analysis from the simulation can be repeated; in a situation where a doctor asks for a consult, we can simulate the effect of assessing patients ranked by predicted risk, vs assessing all patients above the threshold (as per the external validation study above).
-
-```{r}
-# In this scenario, deterioration leads to ICU admission
+# Apply thresholds to population
+library(dplyr)
 df_ed <- df_ed |>
   mutate(
     t1 = ifelse(pred_risk >= threshold_spec_70, 1, 0),
@@ -402,53 +396,94 @@ df_ed <- df_ed |>
     )
   )
 
+remove(serp_roc, cutpoint_serp)
+```
+
+While we are at it, we should check model performance first based on discrimination and calibration. This will determine how close our example is to the simulated ideal.
+
+```{r}
+library(ggplot2)
+preds <- subset(df_ed, select = c("outcome_died_30d", "pred_risk"))
+preds$pr_prob <- predict(glm(outcome_died_30d ~ pred_risk, family = binomial(), data = preds), type = "response")
+auc(predictor = preds$pr_prob, response = preds$outcome_died_30d)
+
+p_calib <- preds |> ggplot()
+p_calib +
+  geom_histogram(aes(x = pr_prob, y = ..count../sum(..count..)), alpha = 0.2, colour = "#999999") +
+  geom_smooth(aes(x = pr_prob, y = outcome_died_30d)) +
+  geom_abline() +
+  theme_bw() +
+  ylab("Observed frequency") +
+  xlab("Predicted probability") +
+  geom_text(aes(x = 0.0, y = 0.9), label = "AUC = 0.83") +
+  geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
+  geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")
+
+ggsave(filename = "SERP_model_performance.jpg", width = 8, height = 6)
 
 ```
 
+### Results
+
+Now that we have data from a real setting, we can estimate the results as per the simulation above. In our example, the ED may see around 135,000 patients a year, or 370/day. Assuming there are busy times throughout the day, there may periods where as many as 150 patients are in the ED at any given time.
+
+The highest acuity patients are typically evaluated urgently. This leaves many patients who may be too acutely unwell for discharge, but lower priority. In a busy ED, this may require some prioritisation of resources to avoid deterioration events for those patients who are waiting for assessment. Prospectively assessing based on predicted risk compared to assessing randomly (e.g., by order of ED presentation) may lead to better model performance, indicating that it is not just the model but how it is implemented that can drive outcomes.
+
 ### Approach 1: repeat the simulated analysis
 
-Assuming 100 patients at any given time are being assessed in ED
+Let's repeat the simulation first to test whether our results stack up using real data.
 
 ```{r}
-# Set up bootstrap resampler
-n_samples = 100
-n_eval = 0.2 * n_samples
-max_iter = 10000
-results_out <- list()
-
-# 1. Obtain random set
-# 2. Extract all positive cases under each threshold (0.7, 0.8, 0.9)
-# 3. Summarise PPV and misclassification costs using ranking vs under a random sample
+# Custom function simulator() ->
+# 1. Obtain random set of patients with risk > t1 and risk < t3
+# 2. Obtain randomly selected set for evaluation
+# 3. Compare to ranked set for evaluation
 set.seed(888)
-for (i in 1:max_iter) {
+n_samples = 150
 
-  # Sample from data
-  df = df_ed[sample(nrow(df_ed), n_samples),] |>
-    arrange(desc(pred_risk))
-  
-  # Take (n_eval) random draws vs 5 ranking-based draws
-  df_7 = subset(df, t1 == 1) |> slice_sample(n = n_eval) |> 
-    mutate(Method = "t1 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  df_8 = subset(df, t2 == 1) |> slice_sample(n = n_eval) |> 
-    mutate(Method = "t2 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  df_9 = subset(df, t3 == 1) |> slice_sample(n = n_eval) |> 
-    mutate(Method = "t3 unranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  df_7_rank = subset(df, t1 == 1) |> slice_head(n = n_eval) |> 
-    mutate(Method = "t1 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  df_8_rank = subset(df, t2 == 1) |> slice_head(n = n_eval) |> 
-    mutate(Method = "t2 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  df_9_rank = subset(df, t3 == 1) |> slice_head(n = n_eval) |> 
-    mutate(Method = "t3 ranked", TP = ifelse(class_t1 == "TP", 1, 0), iter = i)
-  
-  results_out[[i]] <- do.call(rbind, list(df_7, df_8, df_9, df_7_rank, df_8_rank, df_9_rank))
-}
+sim_n_1 <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.05 * n_samples),
+  max_iter = 10000 
+  )
 
-serp_results <- do.call(rbind, results_out)
-serp_results$Cost <- if_else(serp_results$TP == 0, 
-                             rgamma(nrow(serp_results), shape = 110.314, scale = 0.172) * (3.19 * 0.85), 
-                             0)
+sim_n_2 <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.10 * n_samples),
+  max_iter = 10000 
+)
 
-# Results are for only a small period of the day; extrapolate to annual
+sim_n_3 <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.15 * n_samples),
+  max_iter = 10000 
+)
+
+sim_n_1$group <- "5% of patients evaluated"
+sim_n_2$group <- "10% of patients evaluated"
+sim_n_3$group <- "15% of patients evaluated"
+
+sims_summary <- bind_rows(sim_n_1, sim_n_2, sim_n_3) |>
+  group_by(group, Method, iter) |>
+  summarise(Cost = mean(Cost),
+            PPV = mean(TP)) |>
+  group_by(group, Method) |>
+  summarise(Median_PPV = median(PPV),
+            PPV_low = quantile(PPV, 0.025),
+            PPV_high = quantile(PPV, 0.975),
+            Median_cost = median(Cost),
+            Cost_low = quantile(Cost, 0.025),
+            Cost_high = quantile(Cost, 0.975)) |>
+  ungroup()
+
+d_costs <- sims_summary |>
+  group_by(group) |>
+  summarise(Savings_annual = (Median_cost[2] - Median_cost[1]) * 135000) 
+
+# Results are for only a small period of the day; extrapolate to annual?
 
 ```
 

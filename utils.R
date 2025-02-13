@@ -19,3 +19,38 @@ obtain_sample <- function(data, threshold_class, sample){
     select(Method, auc, p0, predicted, actual)
   
 }
+
+simulator <- function(data, n_samples, n_eval, max_iter){
+  results_out <- list()
+  for (i in 1:max_iter) {
+    
+    # Sample from data and take all patients with a score above t1 but below t3
+    df = df_ed[sample(nrow(df_ed), n_samples),] |>
+      filter(t1 == 1 & t3 == 0) |>
+      arrange(desc(pred_risk))
+    
+    df_rand = df |>
+      slice_sample(n = n_eval) |>
+      mutate(
+        iter = i,
+        Method = "Unranked")
+    
+    df_rank = df |>
+      slice_head(n = n_eval) |>
+      mutate(
+        iter = i,
+        Method = "Ranked"
+      )
+    
+    results_out[[i]] <- do.call(rbind, list(df_rand, df_rank))
+  }
+  
+  serp_results <- do.call(rbind, results_out)
+  serp_results$TP <- ifelse(serp_results$class_t1 == "TP", 1, 0)
+  serp_results$Cost <- if_else(serp_results$TP == 1,
+                               0,
+                               rgamma(nrow(serp_results), shape = 110.314, scale = 0.172) * (3.19 * 0.85))
+  
+  return(serp_results)
+}
+  
