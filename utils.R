@@ -29,6 +29,9 @@ simulator <- function(data, n_samples, n_eval, max_iter){
       filter(t1 == 1 & t3 == 0) |>
       arrange(desc(pred_risk))
     
+    FP = rgamma(nrow(df), shape = 110.314, scale = 0.172) * (3.19 * 0.85)
+    df$Cost = FP
+    
     df_rand = df |>
       slice_sample(n = n_eval) |>
       mutate(
@@ -47,9 +50,7 @@ simulator <- function(data, n_samples, n_eval, max_iter){
   
   serp_results <- do.call(rbind, results_out)
   serp_results$TP <- ifelse(serp_results$class_t1 == "TP", 1, 0)
-  serp_results$Cost <- if_else(serp_results$TP == 1,
-                               0,
-                               rgamma(nrow(serp_results), shape = 110.314, scale = 0.172) * (3.19 * 0.85))
+  serp_results$Cost <- if_else(serp_results$TP == 1, 0, serp_results$Cost)
   
   return(serp_results)
 }

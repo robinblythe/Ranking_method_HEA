@@ -58,7 +58,6 @@ library(tidyverse)
 auc = 0.85
 params = 30
 p0 = 0.05
-wtp = 50000
 
 # Obtain minimum sample size/events
 pmsamp <- pmsampsize::pmsampsize(
@@ -117,15 +116,17 @@ sample_pop$predicted <- predict(fit, type = "response")
 ##### Fixed estimates for threshold selection
 
 ```{r}
+wtp = 45000
+
 fx_nmb <- get_nmb_sampler(
   # Cost of ICU admission
-  outcome_cost = 14134,
+  outcome_cost = (14134*0.85)*(1.03)^4,
   # Willingness to pay per QALY
   wtp = wtp,
   # QALYs lost due to deterioration event
   qalys_lost = 0.03,
   # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity       cost = chance of successful intervention * outcome cost * underlying p0)
-  high_risk_group_treatment_cost = (3.19 * 19) + ((1 - 0.910) * 14134 * p0),
+  high_risk_group_treatment_cost = (3.19 * 0.85 * 1.03 * 19) + ((1 - 0.910) * (14134*0.85)*(1.03)^4 * p0),
   # Chance of successful intervention
   high_risk_group_treatment_effect = 1 - 0.910
 )
@@ -297,6 +298,7 @@ results <- results |>
 
 ```{r, message = FALSE}
 # Create plots
+library(patchwork)
 p0_values <- c(`0.01` = "Prevalence = 0.01",
                `0.05` = "Prevalence = 0.05",
                `0.1` = "Prevalence = 0.10")
@@ -304,10 +306,14 @@ p0_values <- c(`0.01` = "Prevalence = 0.01",
 p_PPV <- results |> 
   ggplot(aes(x = auc, y = PPV, colour = Method, fill = Method))
 
+p_costs <- results |>
+  ggplot(aes(x = auc, y = Cost, colour = Method, fill = Method))
+
 p_PPV +
-  geom_line(linewidth = 2) +
+  geom_line(linewidth = 2, show.legend = FALSE) +
   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high), 
-              alpha = 0.2, linetype = "dotted"
+              alpha = 0.2, linetype = "dotted",
+              show.legend = FALSE
               ) +
   facet_wrap(vars(p0), labeller = as_labeller(p0_values)) +
   theme_bw() +
@@ -315,13 +321,8 @@ p_PPV +
         legend.position = "bottom") +
   scale_x_continuous(limits = c(0.64, 0.96),
                      breaks = seq(0.65, 0.95, 0.1), 
-                     name = "Model AUC")
-
-ggsave(filename = "PPV_results.png", height = 6, width = 10)
-
-p_costs <- results |>
-  ggplot(aes(x = auc, y = Cost, colour = Method, fill = Method))
-
+                     name = "Model AUC") +
+  guides(y = "none") +
 p_costs +
   geom_line(linewidth = 2) +
   geom_ribbon(aes(ymin = Cost_low, ymax = Cost_high), 
@@ -335,9 +336,12 @@ p_costs +
                      breaks = seq(0.65, 0.95, 0.1), 
                      name = "Model AUC") +
   scale_y_continuous(breaks = seq(25, 200, 25), 
-                     name = "Mean misclassification cost per patient")
+                     name = "Mean misclassification cost per patient") +
+  plot_layout(ncol = 1) +
+  plot_annotation(tag_levels = 'A')
+  
 
-ggsave(filename = "Cost_results.png", height = 6, width = 10)
+ggsave(filename = "Sim_results.png", height = 10, width = 8)
 
 rm(list = ls(all.names = TRUE))
 gc()
@@ -352,7 +356,7 @@ To use a worked example, we can take real ED data from Singapore and a predictiv
 ```{r, message = FALSE}
 # Load data
 df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS") # home laptop
-df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS") # work laptop
+#df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS") # work laptop
 
 # Obtain thresholds from https://www.nature.com/articles/s41598-022-22233-w#Tab3
 library(pROC)
@@ -377,26 +381,26 @@ df_ed <- df_ed |>
     t2 = ifelse(pred_risk >= threshold_spec_80, 1, 0),
     t3 = ifelse(pred_risk >= threshold_spec_90, 1, 0),
     class_t1 = case_when(
-      t1 == 1 & outcome_icu == 1 ~ "TP",
-      t1 == 1 & outcome_icu == 0 ~ "FP",
-      t1 == 0 & outcome_icu == 1 ~ "FN",
-      t1 == 0 & outcome_icu == 0 ~ "TN"
+      t1 == 1 & outcome_died_30d == 1 ~ "TP",
+      t1 == 1 & outcome_died_30d == 0 ~ "FP",
+      t1 == 0 & outcome_died_30d == 1 ~ "FN",
+      t1 == 0 & outcome_died_30d == 0 ~ "TN"
     ),
     class_t2 = case_when(
-      t2 == 1 & outcome_icu == 1 ~ "TP",
-      t2 == 1 & outcome_icu == 0 ~ "FP",
-      t2 == 0 & outcome_icu == 1 ~ "FN",
-      t2 == 0 & outcome_icu == 0 ~ "TN"
+      t2 == 1 & outcome_died_30d == 1 ~ "TP",
+      t2 == 1 & outcome_died_30d == 0 ~ "FP",
+      t2 == 0 & outcome_died_30d == 1 ~ "FN",
+      t2 == 0 & outcome_died_30d == 0 ~ "TN"
     ),
     class_t3 = case_when(
-      t3 == 1 & outcome_icu == 1 ~ "TP",
-      t3 == 1 & outcome_icu == 0 ~ "FP",
-      t3 == 0 & outcome_icu == 1 ~ "FN",
-      t3 == 0 & outcome_icu == 0 ~ "TN"
+      t3 == 1 & outcome_died_30d == 1 ~ "TP",
+      t3 == 1 & outcome_died_30d == 0 ~ "FP",
+      t3 == 0 & outcome_died_30d == 1 ~ "FN",
+      t3 == 0 & outcome_died_30d == 0 ~ "TN"
     )
   )
 
-remove(serp_roc, cutpoint_serp)
+remove(serp_roc, cutpoint_serp, threshold_spec_70, threshold_spec_80, threshold_spec_90)
 ```
 
 While we are at it, we should check model performance first based on discrimination and calibration. This will determine how close our example is to the simulated ideal.
@@ -407,19 +411,17 @@ preds <- subset(df_ed, select = c("outcome_died_30d", "pred_risk"))
 preds$pr_prob <- predict(glm(outcome_died_30d ~ pred_risk, family = binomial(), data = preds), type = "response")
 auc(predictor = preds$pr_prob, response = preds$outcome_died_30d)
 
-p_calib <- preds |> ggplot()
-p_calib +
+p_calib_30d <- preds |> ggplot()
+p_calib_30d +
   geom_histogram(aes(x = pr_prob, y = ..count../sum(..count..)), alpha = 0.2, colour = "#999999") +
   geom_smooth(aes(x = pr_prob, y = outcome_died_30d)) +
   geom_abline() +
   theme_bw() +
   ylab("Observed frequency") +
   xlab("Predicted probability") +
-  geom_text(aes(x = 0.0, y = 0.9), label = "AUC = 0.83") +
+  geom_text(aes(x = 0.05, y = 0.9), label = "Model AUC (30d mortality) = 0.83") +
   geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
   geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")
-
-ggsave(filename = "SERP_model_performance.jpg", width = 8, height = 6)
 
 ```
 
@@ -433,11 +435,14 @@ The highest acuity patients are typically evaluated urgently. This leaves many p
 
 Let's repeat the simulation first to test whether our results stack up using real data.
 
+Note - currently, we are using the model to predict 30 day mortality as a proxy for clinical deterioration. When we instead predict ICU admission (perhaps a better measure), you end up with lower benefits because the model AUC is more like 0.65. This supports our findings from before - so we should replicate the analysis and use it for both.
+
 ```{r}
 # Custom function simulator() ->
 # 1. Obtain random set of patients with risk > t1 and risk < t3
 # 2. Obtain randomly selected set for evaluation
 # 3. Compare to ranked set for evaluation
+source("./utils.R")
 set.seed(888)
 n_samples = 150
 
@@ -445,7 +450,7 @@ sim_n_1 <- simulator(
   data = df_ed,
   n_samples = n_samples,
   n_eval = ceiling(0.05 * n_samples),
-  max_iter = 10000 
+  max_iter = 10000
   )
 
 sim_n_2 <- simulator(
@@ -467,59 +472,66 @@ sim_n_2$group <- "10% of patients evaluated"
 sim_n_3$group <- "15% of patients evaluated"
 
 sims_summary <- bind_rows(sim_n_1, sim_n_2, sim_n_3) |>
+  mutate(group = factor(group, levels = c("5% of patients evaluated",
+                                          "10% of patients evaluated",
+                                          "15% of patients evaluated"))) |>
   group_by(group, Method, iter) |>
   summarise(Cost = mean(Cost),
             PPV = mean(TP)) |>
   group_by(group, Method) |>
-  summarise(Median_PPV = median(PPV),
+  summarise(Mean_PPV = mean(PPV),
             PPV_low = quantile(PPV, 0.025),
             PPV_high = quantile(PPV, 0.975),
-            Median_cost = median(Cost),
+            Mean_cost = mean(Cost),
             Cost_low = quantile(Cost, 0.025),
             Cost_high = quantile(Cost, 0.975)) |>
   ungroup()
 
 d_costs <- sims_summary |>
   group_by(group) |>
-  summarise(Savings_annual = (Median_cost[2] - Median_cost[1]) * 135000) 
+  summarise(Savings_annual = (Mean_cost[2] - Mean_cost[1]) * 135000,
+            Savings_low = (Cost_low[2] - Cost_low[1]) * 135000,
+            Savings_high = (Cost_high[2] - Cost_high[1]) * 135000) 
 
-# Results are for only a small period of the day; extrapolate to annual?
 
 ```
 
 ### Approach 2: Try something different (rank vs threshold)
 
-In addition to repeating the simulation results (as per above), we can also see what happens if we use a ranking approach instead of thresholds. The intention here is to check whether ranking by predicted risks leads to lower misclassification costs and better PPV based on the number of patients evaluated (x-axis). This can be compared to threshold costs.
+Experiment: what if we use ranking instead of thresholds?
+
+Similar to above: the model AUC plays a large part in this. Replicate the below analysis for ICU admission too
 
 ```{r}
-n_samples = 50
+n_samples = 150
 wtp = 50000
+max_iter = 10000
 ranking_out <- list()
 
 set.seed(888)
 for (i in 1:max_iter) {
-  
+
   FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)
   FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))
 
   # Sample from data
   df = df_ed[sample(nrow(df_ed), n_samples),] |>
     arrange(desc(pred_risk))
-  
+
   ranking_out[[i]] <- tibble(
     iter = rep(i, 7),
     Method = c(
       "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"
     ),
     Mean_cost = c(
-      (5 - sum(df[1:5,]$outcome_icu)) * FP +
-        sum(df[6:n_samples,]$outcome_icu) * FN,
-      (10 - sum(df[1:10,]$outcome_icu)) * FP +
-        sum(df[11:n_samples,]$outcome_icu) * FN,
-      (15 - sum(df[1:15,]$outcome_icu)) * FP +
-        sum(df[16:n_samples,]$outcome_icu) * FN,
-      (20 - sum(df[1:20,]$outcome_icu)) * FP +
-        sum(df[21:n_samples,]$outcome_icu) * FN,
+      (5 - sum(df[1:5,]$outcome_died_30d)) * FP +
+        sum(df[6:n_samples,]$outcome_died_30d) * FN,
+      (10 - sum(df[1:10,]$outcome_died_30d)) * FP +
+        sum(df[11:n_samples,]$outcome_died_30d) * FN,
+      (15 - sum(df[1:15,]$outcome_died_30d)) * FP +
+        sum(df[16:n_samples,]$outcome_died_30d) * FN,
+      (20 - sum(df[1:20,]$outcome_died_30d)) * FP +
+        sum(df[21:n_samples,]$outcome_died_30d) * FN,
       sum(df$class_t1 == "FP") * FP +
         sum(df$class_t1 == "FN") * FN,
       sum(df$class_t2 == "FP") * FP +
@@ -528,10 +540,10 @@ for (i in 1:max_iter) {
         sum(df$class_t3 == "FN") * FN
     ),
     Mean_PPV = c(
-      mean(df[1:5,]$outcome_icu),
-      mean(df[1:10,]$outcome_icu),
-      mean(df[1:15,]$outcome_icu),
-      mean(df[1:20,]$outcome_icu),
+      mean(df[1:5,]$outcome_died_30d),
+      mean(df[1:10,]$outcome_died_30d),
+      mean(df[1:15,]$outcome_died_30d),
+      mean(df[1:20,]$outcome_died_30d),
       sum(df$class_t1 == "TP")/sum(df$t1),
       sum(df$class_t2 == "TP")/sum(df$t2),
       sum(df$class_t3 == "TP")/sum(df$t3)
@@ -549,4 +561,143 @@ rank_summary <- rank_results |>
             PPV = median(Mean_PPV),
             PPV_low = quantile(Mean_PPV, 0.025),
             PPV_high = quantile(Mean_PPV, 0.975))
+```
+
+## Repeating analysis for ICU admission prediction
+
+As noted above, the model is well calibrated and a good discriminator for 30 day mortality. However, it may be used in a context where ICU admission is the more useful predicted outcome. We should repeat the analysis to demonstrate this.
+
+```{r}
+options(scipen = 100, digits = 3)
+library(ggplot2)
+library(patchwork)
+preds_icu <- subset(df_ed, select = c("outcome_icu", "pred_risk"))
+preds_icu$pr_prob <- predict(glm(outcome_icu ~ pred_risk, family = binomial(), data = preds_icu), type = "response")
+auc(predictor = preds_icu$pr_prob, response = preds_icu$outcome_icu)
+
+p_calib_icu <- preds_icu |> ggplot()
+
+p_calib_icu +
+  geom_histogram(aes(x = pr_prob, y = ..count../sum(..count..)), alpha = 0.2, colour = "#999999") +
+  geom_smooth(aes(x = pr_prob, y = outcome_icu), colour = "#D55E00") +
+  geom_abline() +
+  scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
+  theme_bw() +
+  ylab("Observed frequency") +
+  xlab("Predicted probability") +
+  geom_text(aes(x = 0.5, y = 0.9), label = "Model AUC (ICU admission) = 0.65") +
+  geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
+  geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks") +
+p_calib_30d +
+  geom_histogram(aes(x = pr_prob, y = ..count../sum(..count..)), alpha = 0.2, colour = "#999999") +
+  geom_smooth(aes(x = pr_prob, y = outcome_died_30d)) +
+  geom_abline() +
+  scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
+  theme_bw() +
+  ylab("Observed frequency") +
+  xlab("Predicted probability") +
+  geom_text(aes(x = 0.5, y = 0.9), label = "Model AUC (30d mortality) = 0.83") +
+  geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
+  geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks") +
+plot_layout(ncol = 1) +
+  plot_annotation(tag_levels = 'A')
+
+ggsave(file = "SERP_model_results.jpg", height = 10, width = 8)
+
+
+########################
+library(pROC)
+serp_roc <- roc(response = df_ed$outcome_icu, predictor = df_ed$pred_risk)
+cutpoint_serp <- coords(
+  roc = serp_roc,
+  x = "all",
+  input = "threshold",
+  ret = c("threshold", "specificity", "ppv")
+)
+
+# Inspect serp_roc to find thresholds
+threshold_spec_70_icu <- 24
+threshold_spec_80_icu <- 27
+threshold_spec_90_icu <- 32
+
+# Apply thresholds to population
+library(dplyr)
+df_ed <- df_ed |>
+  mutate(
+    t1 = ifelse(pred_risk >= threshold_spec_70_icu, 1, 0),
+    t2 = ifelse(pred_risk >= threshold_spec_80_icu, 1, 0),
+    t3 = ifelse(pred_risk >= threshold_spec_90_icu, 1, 0),
+    class_t1 = case_when(
+      t1 == 1 & outcome_icu == 1 ~ "TP",
+      t1 == 1 & outcome_icu == 0 ~ "FP",
+      t1 == 0 & outcome_icu == 1 ~ "FN",
+      t1 == 0 & outcome_icu == 0 ~ "TN"
+    ),
+    class_t2 = case_when(
+      t2 == 1 & outcome_icu == 1 ~ "TP",
+      t2 == 1 & outcome_icu == 0 ~ "FP",
+      t2 == 0 & outcome_icu == 1 ~ "FN",
+      t2 == 0 & outcome_icu == 0 ~ "TN"
+    ),
+    class_t3 = case_when(
+      t3 == 1 & outcome_icu == 1 ~ "TP",
+      t3 == 1 & outcome_icu == 0 ~ "FP",
+      t3 == 0 & outcome_icu == 1 ~ "FN",
+      t3 == 0 & outcome_icu == 0 ~ "TN"
+    )
+  )
+
+remove(serp_roc, cutpoint_serp, threshold_spec_70_icu, threshold_spec_80_icu, threshold_spec_90_icu)
+
+
+source("./utils.R")
+set.seed(888)
+n_samples = 150
+
+sim_n_1_icu <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.05 * n_samples),
+  max_iter = 10000
+  )
+
+sim_n_2_icu <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.10 * n_samples),
+  max_iter = 10000 
+)
+
+sim_n_3_icu <- simulator(
+  data = df_ed,
+  n_samples = n_samples,
+  n_eval = ceiling(0.15 * n_samples),
+  max_iter = 10000 
+)
+
+sim_n_1_icu$group <- "5% of patients evaluated"
+sim_n_2_icu$group <- "10% of patients evaluated"
+sim_n_3_icu$group <- "15% of patients evaluated"
+
+sims_icu_summary <- bind_rows(sim_n_1_icu, sim_n_2_icu, sim_n_3_icu) |>
+  mutate(group = factor(group, levels = c("5% of patients evaluated",
+                                          "10% of patients evaluated",
+                                          "15% of patients evaluated"))) |>
+  group_by(group, Method, iter) |>
+  summarise(Cost = mean(Cost),
+            PPV = mean(TP)) |>
+  group_by(group, Method) |>
+  summarise(Mean_PPV = mean(PPV),
+            PPV_low = quantile(PPV, 0.025),
+            PPV_high = quantile(PPV, 0.975),
+            Mean_cost = mean(Cost),
+            Cost_low = quantile(Cost, 0.025),
+            Cost_high = quantile(Cost, 0.975)) |>
+  ungroup()
+
+d_costs <- sims_icu_summary |>
+  group_by(group) |>
+  summarise(Savings_annual = (Mean_cost[2] - Mean_cost[1]) * 135000,
+            Savings_low = (Cost_low[2] - Cost_low[1]) * 135000,
+            Savings_high = (Cost_high[2] - Cost_high[1]) * 135000) 
 ```
