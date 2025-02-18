@@ -315,7 +315,9 @@ p_PPV +
   scale_x_continuous(limits = c(0.64, 0.96),
                      breaks = seq(0.65, 0.95, 0.1), 
                      name = "Model AUC") +
-  guides(y = "none") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  scale_colour_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
+  scale_fill_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
 p_costs +
   geom_line(linewidth = 2) +
   geom_ribbon(aes(ymin = Cost_low, ymax = Cost_high), 
@@ -330,6 +332,8 @@ p_costs +
                      name = "Model AUC") +
   scale_y_continuous(breaks = seq(25, 200, 25), 
                      name = "Mean misclassification cost per patient") +
+  scale_colour_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
+  scale_fill_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
   plot_layout(ncol = 1) +
   plot_annotation(tag_levels = 'A')
   
@@ -486,12 +490,14 @@ d_costs <- sims_summary |>
             Savings_low = (Cost_low[2] - Cost_low[1]) * 135000,
             Savings_high = (Cost_high[2] - Cost_high[1]) * 135000) 
 
-
+save(sims_summary, d_costs, file = "sgh_30d_results.RData")
 ```
 
 ## Repeating analysis for ICU admission prediction
 
 As noted above, the model is well calibrated and a good discriminator for 30 day mortality. However, it may be used in a context where ICU admission is the more useful predicted outcome. We should repeat the analysis to demonstrate this.
+
+### Visualise external validation of SERP
 
 ```{r}
 options(scipen = 100, digits = 3)
@@ -528,9 +534,12 @@ p_calib_30d +
 plot_layout(ncol = 1) +
   plot_annotation(tag_levels = 'A')
 
-ggsave(file = "SERP_model_results.jpg", height = 10, width = 8)
+ggsave(file = "SERP_model_validation.jpg", height = 10, width = 8)
+```
 
+### Repeat simulations
 
+```{r}
 ########################
 library(pROC)
 serp_roc <- roc(response = df_ed$outcome_icu, predictor = df_ed$pred_risk)
@@ -627,7 +636,74 @@ d_costs_icu <- sims_icu_summary |>
             Savings_low = (Cost_low[2] - Cost_low[1]) * 135000,
             Savings_high = (Cost_high[2] - Cost_high[1]) * 135000)
 
-# Next step - got to plot the sims_icu results. Do this next time
+save(sims_icu_summary, d_costs_icu, file = "SERP_results.RData")
+
+
+```
+
+### Visualise results
+
+```{r}
+sims_icu_summary$outcome <- "ICU admission"
+sims_summary$outcome <- "30 day mortality"
+
+p_sims_PPV <- bind_rows(sims_summary, sims_icu_summary) |> 
+  mutate(group = case_when(
+    group == "5% of patients evaluated" ~ 5,
+    group == "10% of patients evaluated" ~ 10,
+    group == "15% of patients evaluated" ~ 15
+  )) |>
+  ggplot(aes(x = group, y = Mean_PPV, ymin = PPV_low, ymax = PPV_high, fill = Method, colour = Method))
+
+p_sims_cost <- bind_rows(sims_summary, sims_icu_summary) |> 
+  mutate(group = case_when(
+    group == "5% of patients evaluated" ~ 5,
+    group == "10% of patients evaluated" ~ 10,
+    group == "15% of patients evaluated" ~ 15
+  )) |>
+  ggplot(aes(x = group, y = Mean_cost, ymin = Cost_low, ymax = Cost_high, fill = Method, colour = Method))
+
+p_table <- tibble(
+  "Patients evaluated" = d_costs$group,
+  "Annual cost savings (30d mortality)" = paste0("$", format(ceiling(d_costs$Savings_annual), big.mark = ","), " [",
+                                                 format(ceiling(d_costs$Savings_high), big.mark = ","), ", ",
+                                                 format(ceiling(d_costs$Savings_low), big.mark = ","), "]"),
+  "Annual cost savings (ICU admission)" = paste0("$", format(ceiling(d_costs_icu$Savings_annual), big.mark = ","), " [",
+                                                 format(ceiling(d_costs_icu$Savings_high), big.mark = ","), ", ",
+                                                 format(ceiling(d_costs_icu$Savings_low), big.mark = ","), "]")
+)
+
+library(gridExtra)
+p_table <- tableGrob(p_table, rows = NULL, theme = ttheme_minimal(base_size = 9.5))
+p_table$widths <- unit(rep(2, ncol(p_table)), "null")
+p_table$heights <- unit(rep(1, nrow(p_table)), "null")
+p_table <- ggplot() + annotation_custom(p_table)
+
+p_sims_PPV +
+  geom_line(linewidth = 2, show.legend = FALSE) +
+  geom_ribbon(alpha = 0.2, linetype = "dotted", show.legend = FALSE) +
+  facet_wrap(vars(outcome)) +
+  scale_x_continuous(limits = c(5, 15), breaks = c(5, 10, 15)) +
+  scale_y_continuous(limits = c(0, 0.3), breaks = seq(0, 0.25, 0.05)) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  theme(panel.grid.minor = element_blank()) +
+  ylab("Mean PPV") +
+p_sims_cost +
+  geom_line(linewidth = 2) +
+  geom_ribbon(alpha = 0.2, linetype = "dotted") +
+  facet_wrap(vars(outcome)) +
+  scale_x_continuous(limits = c(5, 15), breaks = c(5, 10, 15)) +
+  scale_y_continuous(limits = c(30, 60), breaks = seq(30, 60, 10)) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  ylab("Mean misclassification cost/patient") +
+  xlab("Percent of patients evaluated") +
+p_table +
+  plot_layout(ncol = 1)
+
+ggsave(file = "SERP_results.jpg", height = 8, width = 8)
 ```
 
 ### Approach 2: Try something different (rank vs threshold)
@@ -636,7 +712,6 @@ Experiment: what if we use ranking instead of thresholds?
 
 Similar to above: the model AUC plays a large part in this. Replicate the below analysis for ICU admission too
 
-```{r} n_samples = 150 wtp = 50000 max_iter = 10000 ranking_out <- list()  set.seed(888) for (i in 1:max_iter) {    FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)   FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))    # Sample from data   df = df_ed[sample(nrow(df_ed), n_samples),] |>     arrange(desc(pred_risk))    ranking_out[[i]] <- tibble(     iter = rep(i, 7),     Method = c(       "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"     ),     Mean_cost = c(       (5 - sum(df[1:5,]$outcome_died_30d)) * FP +         sum(df[6:n_samples,]$outcome_died_30d) * FN,       (10 - sum(df[1:10,]$outcome_died_30d)) * FP +         sum(df[11:n_samples,]$outcome_died_30d) * FN,       (15 - sum(df[1:15,]$outcome_died_30d)) * FP +         sum(df[16:n_samples,]$outcome_died_30d) * FN,       (20 - sum(df[1:20,]$outcome_died_30d)) * FP +         sum(df[21:n_samples,]$outcome_died_30d) * FN,       sum(df$class_t1 == "FP") * FP +         sum(df$class_t1 == "FN") * FN,       sum(df$class_t2 == "FP") * FP +         sum(df$class_t2 == "FN") * FN,       sum(df$class_t3 == "FP") * FP +         sum(df$class_t3 == "FN") * FN     ),     Mean_PPV = c(       mean(df[1:5,]$outcome_died_30d),       mean(df[1:10,]$outcome_died_30d),       mean(df[1:15,]$outcome_died_30d),       mean(df[1:20,]$outcome_died_30d),       sum(df$class_t1 == "TP")/sum(df$t1),       sum(df$class_t2 == "TP")/sum(df$t2),       sum(df$class_t3 == "TP")/sum(df$t3)       )   ) }  rank_results <- do.call(rbind, ranking_out) rank_summary <- rank_results |>   na.omit() |>   group_by(Method) |>   summarise(Cost = median(Mean_cost),             Cost_low = quantile(Mean_cost, 0.025),             Cost_high = quantile(Mean_cost, 0.975),             PPV = median(Mean_PPV),             PPV_low = quantile(Mean_PPV, 0.025),             PPV_high = quantile(Mean_PPV, 0.975))}
-```
+`{r} n_samples = 150 wtp = 50000 max_iter = 10000 ranking_out <- list()  set.seed(888) for (i in 1:max_iter) {    FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)   FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))    # Sample from data   df = df_ed[sample(nrow(df_ed), n_samples),] |>     arrange(desc(pred_risk))    ranking_out[[i]] <- tibble(     iter = rep(i, 7),     Method = c(       "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"     ),     Mean_cost = c(       (5 - sum(df[1:5,]$outcome_died_30d)) * FP +         sum(df[6:n_samples,]$outcome_died_30d) * FN,       (10 - sum(df[1:10,]$outcome_died_30d)) * FP +         sum(df[11:n_samples,]$outcome_died_30d) * FN,       (15 - sum(df[1:15,]$outcome_died_30d)) * FP +         sum(df[16:n_samples,]$outcome_died_30d) * FN,       (20 - sum(df[1:20,]$outcome_died_30d)) * FP +         sum(df[21:n_samples,]$outcome_died_30d) * FN,       sum(df$class_t1 == "FP") * FP +         sum(df$class_t1 == "FN") * FN,       sum(df$class_t2 == "FP") * FP +         sum(df$class_t2 == "FN") * FN,       sum(df$class_t3 == "FP") * FP +         sum(df$class_t3 == "FN") * FN     ),     Mean_PPV = c(       mean(df[1:5,]$outcome_died_30d),       mean(df[1:10,]$outcome_died_30d),       mean(df[1:15,]$outcome_died_30d),       mean(df[1:20,]$outcome_died_30d),       sum(df$class_t1 == "TP")/sum(df$t1),       sum(df$class_t2 == "TP")/sum(df$t2),       sum(df$class_t3 == "TP")/sum(df$t3)       )   ) }  rank_results <- do.call(rbind, ranking_out) rank_summary <- rank_results |>   na.omit() |>   group_by(Method) |>   summarise(Cost = median(Mean_cost),             Cost_low = quantile(Mean_cost, 0.025),             Cost_high = quantile(Mean_cost, 0.975),             PPV = median(Mean_PPV),             PPV_low = quantile(Mean_PPV, 0.025),             PPV_high = quantile(Mean_PPV, 0.975))}`
 
 ## 
