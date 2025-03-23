@@ -137,6 +137,7 @@ fx_nmb <- get_nmb_sampler(
 ### ROC-curve and NMB-based cutpoints
 
 ```{r}
+set.seed(888)
 nmb_simulation <- do_nmb_sim(
   sample_size = sample_size,
   n_sims = 500,
@@ -171,7 +172,7 @@ ppv <- coords(
   )
 
 # Maximum tolerable number of false positives per true positive (example)
-nne = 4
+nne = 14
 
 # NNE = 1/PPV
 ppv$nne <- 1/ppv$ppv
@@ -186,6 +187,7 @@ The threshold derived from the number needed to evaluate method is `r round(cutp
 By repeating the sample population simulation step for a selection of prevalence and AUC values, we can mimic external validation across a variety of external settings, using the original model equation derived from the initial parameterisation.
 
 ```{r}
+set.seed(888)
 combs <- expand.grid(
   auc = c(0.65, 0.75, 0.85, 0.95),
   p0 = c(0.01, 0.05, 0.10)
@@ -225,6 +227,7 @@ source("./utils.R")
 
 n_samples = 40
 max_iter = 10000
+set.seed(888)
 sim_results <- list()
 
 for (i in 1:max_iter){
@@ -316,8 +319,9 @@ p_PPV +
                      breaks = seq(0.65, 0.95, 0.1), 
                      name = "Model AUC") +
   scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
-  scale_colour_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
-  scale_fill_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
+  scale_colour_manual(values = c("#999999", "#45B4E9", "#F0E442", "#009E73")) +
+  scale_fill_manual(values = c("#999999", "#45B4E9", "#F0E442", "#009E73")) +
+  labs(y = "Positive predictive value") +
 p_costs +
   geom_line(linewidth = 2) +
   geom_ribbon(aes(ymin = Cost_low, ymax = Cost_high), 
@@ -332,8 +336,8 @@ p_costs +
                      name = "Model AUC") +
   scale_y_continuous(breaks = seq(25, 200, 25), 
                      name = "Mean misclassification cost per patient") +
-  scale_colour_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
-  scale_fill_manual(values = c("#56B4E9", "#009E73", "#F0E442", "#999999")) +
+  scale_colour_manual(values = c("#999999", "#45B4E9", "#F0E442", "#009E73")) +
+  scale_fill_manual(values = c("#999999", "#45B4E9", "#F0E442", "#009E73")) +
   plot_layout(ncol = 1) +
   plot_annotation(tag_levels = 'A')
   
@@ -712,6 +716,63 @@ Experiment: what if we use ranking instead of thresholds?
 
 Similar to above: the model AUC plays a large part in this. Replicate the below analysis for ICU admission too
 
-`{r} n_samples = 150 wtp = 50000 max_iter = 10000 ranking_out <- list()  set.seed(888) for (i in 1:max_iter) {    FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)   FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))    # Sample from data   df = df_ed[sample(nrow(df_ed), n_samples),] |>     arrange(desc(pred_risk))    ranking_out[[i]] <- tibble(     iter = rep(i, 7),     Method = c(       "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"     ),     Mean_cost = c(       (5 - sum(df[1:5,]$outcome_died_30d)) * FP +         sum(df[6:n_samples,]$outcome_died_30d) * FN,       (10 - sum(df[1:10,]$outcome_died_30d)) * FP +         sum(df[11:n_samples,]$outcome_died_30d) * FN,       (15 - sum(df[1:15,]$outcome_died_30d)) * FP +         sum(df[16:n_samples,]$outcome_died_30d) * FN,       (20 - sum(df[1:20,]$outcome_died_30d)) * FP +         sum(df[21:n_samples,]$outcome_died_30d) * FN,       sum(df$class_t1 == "FP") * FP +         sum(df$class_t1 == "FN") * FN,       sum(df$class_t2 == "FP") * FP +         sum(df$class_t2 == "FN") * FN,       sum(df$class_t3 == "FP") * FP +         sum(df$class_t3 == "FN") * FN     ),     Mean_PPV = c(       mean(df[1:5,]$outcome_died_30d),       mean(df[1:10,]$outcome_died_30d),       mean(df[1:15,]$outcome_died_30d),       mean(df[1:20,]$outcome_died_30d),       sum(df$class_t1 == "TP")/sum(df$t1),       sum(df$class_t2 == "TP")/sum(df$t2),       sum(df$class_t3 == "TP")/sum(df$t3)       )   ) }  rank_results <- do.call(rbind, ranking_out) rank_summary <- rank_results |>   na.omit() |>   group_by(Method) |>   summarise(Cost = median(Mean_cost),             Cost_low = quantile(Mean_cost, 0.025),             Cost_high = quantile(Mean_cost, 0.975),             PPV = median(Mean_PPV),             PPV_low = quantile(Mean_PPV, 0.025),             PPV_high = quantile(Mean_PPV, 0.975))}`
+```{r}
+n_samples = 150
+wtp = 50000
+max_iter = 10000
+ranking_out <- list()
+set.seed(888)
 
-## 
+for (i in 1:max_iter) {
+  FP = rgamma(1, shape = 110.314, scale = 0.172) * (3.19 * 0.85)
+  FN = rnorm(1, 14134, 686) * 0.85 + (wtp * rnorm(1, 0.03, 0.04))
+  # Sample from data
+  df = df_ed[sample(nrow(df_ed), n_samples),] |> 
+    arrange(desc(pred_risk))
+  
+  ranking_out[[i]] <- tibble(
+    iter = rep(i, 7),
+    Method = c(
+      "Rank 5", "Rank 10", "Rank 15", "Rank 20", "Unranked t1", "Unranked t2", "Unranked t3"     
+      ),
+    Mean_cost = c(
+      (5 - sum(df[1:5,]$outcome_died_30d)) * FP +
+        sum(df[6:n_samples,]$outcome_died_30d) * FN,
+      (10 - sum(df[1:10,]$outcome_died_30d)) * FP +
+        sum(df[11:n_samples,]$outcome_died_30d) * FN,
+      (15 - sum(df[1:15,]$outcome_died_30d)) * FP + 
+        sum(df[16:n_samples,]$outcome_died_30d) * FN,
+      (20 - sum(df[1:20,]$outcome_died_30d)) * FP +
+        sum(df[21:n_samples,]$outcome_died_30d) * FN,
+      sum(df$class_t1 == "FP") * FP + 
+        sum(df$class_t1 == "FN") * FN,  
+      sum(df$class_t2 == "FP") * FP + 
+        sum(df$class_t2 == "FN") * FN,
+      sum(df$class_t3 == "FP") * FP +
+        sum(df$class_t3 == "FN") * FN
+    ),
+    Mean_PPV = c(
+      mean(df[1:5,]$outcome_died_30d),
+      mean(df[1:10,]$outcome_died_30d),
+      mean(df[1:15,]$outcome_died_30d),   
+      mean(df[1:20,]$outcome_died_30d),   
+      sum(df$class_t1 == "TP")/sum(df$t1),
+      sum(df$class_t2 == "TP")/sum(df$t2),
+      sum(df$class_t3 == "TP")/sum(df$t3),
+    )
+  )
+}
+
+rank_results <- do.call(rbind, ranking_out)
+rank_summary <- rank_results |>
+  na.omit() |>
+  group_by(Method) |>
+  summarise(Cost = median(Mean_cost),
+            Cost_low = quantile(Mean_cost, 0.025),
+            Cost_high = quantile(Mean_cost, 0.975),
+            PPV = median(Mean_PPV),
+            PPV_low = quantile(Mean_PPV, 0.025),
+            PPV_high = quantile(Mean_PPV, 0.975)
+            )
+}
+```
