@@ -1,4 +1,4 @@
-obtain_class <- function(data) {
+obtain_class <- function(data, fit) {
 
   do.call(rbind, data) |>
     as_tibble() |>
