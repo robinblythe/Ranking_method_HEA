@@ -4,6 +4,8 @@ author: "Robin Blythe"
 format: docx
 editor: visual
 bibliography: references.bib
+editor_options: 
+  chunk_output_type: inline
 ---
 
 # Background
@@ -226,94 +228,6 @@ We can now simulate an external validation study under a variety of conditions b
 Semi-random selection of positive cases is possibly more common than ranked approaches, especially when there is insufficient communication between clinical staff, who may not be able to differentiate between high risk patients without laying eyes on each. This is fairly difficult to approximate. Many patients may be deteriorating, but few can be seen within the recommended timeframe while balancing other tasks, and nurses can't lay eyes on all patients at once to do so.
 
 We can simulate this process by taking random draws. In a large hospital, you may have e.g. 40 patients with a positive prediction for a given threshold. We compare the two approaches by selecting 40 random patients above the threshold and 40 patients sorted by predicted risks.
-
-```{r, message = FALSE}
-# Set up simulation
-source("./utils.R")
-
-
-
-max_iter = 100
-set.seed(888)
-sim_results <- list()
-
-for(i in 1:max_iter) {
-  
-  sims <- map2(.x = combs$auc, .y = combs$p0, 
-             \(x, y) cbind(
-               get_sample(auc = x, 
-                          n_samples = , 
-                          prevalence = y),
-               auc = x,
-               p0 = y)
-)
-  
-}
-
-
-
-
-
-df_sims <- obtain_class(sims, fit)
-
-for (i in 1:max_iter){
-  
-  df_youden <- obtain_sample(df_sims, "class_youden", n_samples)
-  df_nne <- obtain_sample(df_sims, "class_nne", n_samples)
-  df_val_opt <- obtain_sample(df_sims, "class_val_opt", n_samples)
-  
-  df_rank <- df_sims |>
-    group_by(auc, p0) |>
-    arrange(desc(predicted)) |>
-    slice_head(n = n_samples) |>
-    mutate(Method = "ranking") |>
-    select(Method, auc, p0, predicted, actual) 
-  
-  iteration <- do.call(rbind, list(df_youden, df_nne, df_val_opt, df_rank)) |>
-    group_by(Method, auc, p0) |>
-    rowwise() |>
-    mutate(Outcome = ifelse(actual == 1, "TP", "FP"),
-           Cost = ifelse(
-             Outcome == "FP",
-             # Opportunity cost of a false positive (see methods section)
-             rgamma(1, shape = 110.314, scale = 0.172) * 3.19 + 
-               (p0 * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686)),
-             # No cost for true positives (for now)
-             0),
-           iter = i)
-  
-  sim_results[[i]] <- iteration
-  remove(df_youden, df_nne, df_val_opt, df_rank, iteration)
-}
-
-results <- do.call(rbind, sim_results)
-remove(sims)
-
-
-```
-
-```{r}
-# Notes: run pmsampsize to get the sample size, then multiply it by the samp_size_mult value
-#         Also assume we can only ever see 80% of the available patients (can change later)
-
-# for each scenario (combination of event rate and AUC and sample_size_multiplier)
-
-  # for each sim (1:10,000):
-    # sample training data
-    # fit model
-    # select threshold (using training data) - only applies to cutpoints, not ranking
-    # sample hospital scenario data (validation)
-    # generate predictions for scenario data
-    # sample false positive cost
-    # for each strategy (cutpoints and ranking) 
-      # select the n patients recieving treatment
-      # apply cost to n false positives 
-      # return total cost
-    # return tibble with one row and one column for each strategy with its cost
-
-
-
-```
 
 We now have simulations for each starting scenario (`r n_samples` samples for each AUC, prevalence, and threshold selection method over `r max_iter` bootstrap iterations).
 
