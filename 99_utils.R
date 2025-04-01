@@ -17,7 +17,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
   
   # Set up health economic helper function for predictNMB value-optimising cutpoint
   wtp <- 45000
-  fx_nmb = predictNMB::get_nmb_sampler(
+  nmb = predictNMB::get_nmb_sampler(
     # Cost of ICU admission
     outcome_cost = (14134 * 0.85) * (1.03)^4,
     # Willingness to pay per QALY
@@ -50,19 +50,16 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
     train$predicted = predict(fit, type = "response")
     
     # Run predictNMB simulation
-    nmb_sim = do_nmb_sim(
-      sample_size = nrow(train),
-      n_sims = 50,
-      n_valid = 10000,
-      sim_auc = auc,
-      event_rate = sum(train$actual == 1)/nrow(train),
-      fx_nmb_training = fx_nmb,
-      fx_nmb_evaluation = fx_nmb
-    )
+    thresholds = get_thresholds(predicted = train$predicted, 
+                                actual = train$actual,
+                                nmb = c("TP" = nmb()[["TP"]],
+                                        "TN" = nmb()[["TN"]],
+                                        "FP" = nmb()[["FP"]],
+                                        "FN" = nmb()[["FN"]]))
     
     # Extract youden index cutpoints
-    cutpoint_youden = median(nmb_sim$df_thresholds$youden)
-    cutpoint_nmb = median(nmb_sim$df_thresholds$value_optimising)
+    cutpoint_nmb = thresholds[["value_optimising"]]
+    cutpoint_youden = thresholds[["youden"]]
     
     # Extract Number Needed to Evaluate (NNE) cutpoint from ROC curve
     cutpoint_nne = get_nne_threshold(predictor = train$predicted, response = train$actual, nne = nne) |> suppressMessages()
