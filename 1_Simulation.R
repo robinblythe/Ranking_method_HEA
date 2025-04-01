@@ -7,28 +7,17 @@ library(tidyverse)
 
 source("./99_utils.R")
 
-# Set up health economic helper function for predictNMB value-optimising cutpoint
-wtp <- 45000
-fx_nmb <- get_nmb_sampler(
-  # Cost of ICU admission
-  outcome_cost = (14134 * 0.85) * (1.03)^4,
-  # Willingness to pay per QALY
-  wtp = wtp,
-  # QALYs lost due to deterioration event
-  qalys_lost = 0.03,
-  # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-  high_risk_group_treatment_cost = (3.19 * 0.85 * 1.03 * 19) + ((1 - 0.910) * (14134 * 0.85) * (1.03)^4 * event_rate),
-  # Chance of successful intervention
-  high_risk_group_treatment_effect = 1 - 0.910
-)
-
-# Select number needed to evaluate
+# Select number needed to evaluate for the NNE threshold
 nne <- 14
-
 
 # Set up parallel computing
 cl = makeCluster(detectCores() - 2)
 
+# Simulation values:
+n_test <- 1000
+n_eval <- 40
+
+test <- run_sims(event_rate = 0.05, auc = 0.85, samp_size_multi = 0.8, niter = 10, n_test = n_test, n_eval = n_eval)
 
 
 
@@ -75,23 +64,3 @@ results <- do.call(rbind, sim_results)
 remove(sims)
 #########################################################################
 
-
-
-
-# # Notes: run pmsampsize to get the sample size, then multiply it by the samp_size_mult value
-#         Also assume we can only ever see 80% of the available patients (can change later)
-
-# for each scenario (combination of event rate and AUC and sample_size_multiplier)
-
-# for each sim (1:10,000):
-# sample training data
-# fit model
-# select threshold (using training data) - only applies to cutpoints, not ranking
-# sample hospital scenario data (validation)
-# generate predictions for scenario data
-# sample false positive cost
-# for each strategy (cutpoints and ranking)
-# select the n patients recieving treatment
-# apply cost to n false positives
-# return total cost
-# return tibble with one row and one column for each strategy with its cost

@@ -1,43 +1,39 @@
 ### Functions for simulation study
-# Helper function to get classification
-obtain_class <- function(data, fit) {
-  do.call(rbind, data) |>
-    as_tibble() |>
-    mutate(
-      predicted = predict(fit, newdata = pick(x), type = "response"),
-      class_val_opt = ifelse(predicted >= cutpoint_nmb, 1, 0),
-      class_nne = ifelse(predicted >= cutpoint_nne, 1, 0),
-      class_youden = ifelse(predicted >= cutpoint_youden, 1, 0)
-    )
-}
-
-# Helper function to get everyone in a class and sample from that group randomly
-obtain_sample <- function(data, threshold_class, sample) {
-  subset(data, get(threshold_class) == 1) |>
-    group_by(auc, p0) |>
-    slice_sample(n = sample) |>
-    ungroup() |>
-    mutate(Method = gsub("class_", "", threshold_class)) |>
-    select(Method, auc, p0, predicted, actual)
-}
 
 # Helper function for ROC-based threshold
 # Obtain a cutpoint based on number needed to evaluate (NNE)
 # Equal to maximum tolerable number of false positives per true positive
 get_nne_threshold <- function(predictor, response, nne){
-  roc_curve <- roc(predictor = predictor, response = response)
-  ppv <- coords(roc_curve, x = "all", input = "threshold", ret = c("threshold", "ppv"))
-  ppv$nne <- 1 / ppv$ppv
+  roc_curve = roc(predictor = predictor, response = response)
+  ppv = coords(roc_curve, x = "all", input = "threshold", ret = c("threshold", "ppv"))
+  ppv$nne = 1 / ppv$ppv
+  cutpoint = min(ppv$threshold[ppv$nne == nne], na.rm = T) |> suppressWarnings()
   
-  return(min(ppv$threshold[ppv$nne == nne], na.rm = T))
+  return(ifelse(is.infinite(cutpoint), 0, cutpoint))
 }
 
 # Main simulation function to repeat the analysis across different event rates, aucs, sample sizes
 run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
+  
+  # Set up health economic helper function for predictNMB value-optimising cutpoint
+  wtp <- 45000
+  fx_nmb = predictNMB::get_nmb_sampler(
+    # Cost of ICU admission
+    outcome_cost = (14134 * 0.85) * (1.03)^4,
+    # Willingness to pay per QALY
+    wtp = wtp,
+    # QALYs lost due to deterioration event
+    qalys_lost = 0.03,
+    # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
+    high_risk_group_treatment_cost = (3.19 * 0.85 * 1.03 * 19) + ((1 - 0.910) * (14134 * 0.85) * (1.03)^4 * event_rate),
+    # Chance of successful intervention
+    high_risk_group_treatment_effect = 1 - 0.910
+  )
+  
   # Get sample size requirements (once per input combination)
   sampsize = pmsampsize::pmsampsize(type = "b", parameters = 1, prevalence = event_rate, cstatistic = auc)
   
-  results <- list()
+  results = list()
   # Run for loop 
   for (i in 1:niter) {
     # Simulate model training data
@@ -69,7 +65,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
     cutpoint_nmb = median(nmb_sim$df_thresholds$value_optimising)
     
     # Extract Number Needed to Evaluate (NNE) cutpoint from ROC curve
-    cutpoint_nne = get_nne_threshold(predictor = train$predicted, response = train$actual, nne = nne)
+    cutpoint_nne = get_nne_threshold(predictor = train$predicted, response = train$actual, nne = nne) |> suppressMessages()
     
     # Simulate model validation data - e.g., a 1000 bed hospital monitoring deteriorating patients
     test = get_sample(auc, n_test, event_rate)
@@ -90,8 +86,8 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
         sum(sample_nne$actual == 0) * FP,
         sum(sample_rank$actual == 0) * FP
       ),
-      auc = auc,
-      event_rate = event_rate,
+      auc_model = auc,
+      event_rate_model = event_rate,
       pr_required_sampsize = samp_size_multi
     )
   }
