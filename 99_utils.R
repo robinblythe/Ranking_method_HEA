@@ -13,7 +13,7 @@ get_nne_threshold <- function(predictor, response, nne){
 }
 
 # Main simulation function to repeat the analysis across different event rates, aucs, sample sizes
-run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
+run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, seed) {
   
   # Set up health economic helper function for predictNMB value-optimising cutpoint
   wtp <- 45000
@@ -34,6 +34,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
   sampsize = pmsampsize::pmsampsize(type = "b", parameters = 1, prevalence = event_rate, cstatistic = auc)
   
   results = list()
+  set.seed(seed)
   # Run for loop 
   for (i in 1:niter) {
     # Simulate model training data
@@ -77,6 +78,18 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval) {
     results[[i]] <- tibble(
       iter = i,
       strategy = c("Youden", "NMB", "NNE", "Rank"),
+      PPV = c(
+        sum(sample_youden$actual)/n_eval,
+        sum(sample_nmb$actual)/n_eval,
+        sum(sample_nne$actual)/n_eval,
+        sum(sample_rank$actual)/n_eval
+      ),
+      sensitivity = c(
+        sum(sample_youden$actual)/sum(test$actual),
+        sum(sample_nmb$actual)/sum(test$actual),
+        sum(sample_nne$actual)/sum(test$actual),
+        sum(sample_rank$actual)/sum(test$actual)
+      ),
       FP_cost = c(
         sum(sample_youden$actual == 0) * FP,
         sum(sample_nmb$actual == 0) * FP,
