@@ -34,4 +34,8 @@ test <- mclapply(1:nrow(combs), function(i){
 }
 )
 
-p <- bind_rows(test) |> ggplot()
+# Do the samp_size_multi as a sensitivity analysis, just stick to the 1x multiplier for main analysis
+p <- bind_rows(test) |> 
+  filter(samp_size_multi == 1) |>
+  select(-pr_required_sampsize) |>
+  ggplot()
