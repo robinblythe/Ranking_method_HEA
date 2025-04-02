@@ -1,9 +1,8 @@
 # Set up study
-options(scipen = 999, digits = 3)
-library(predictNMB)
-library(parallel)
-library(pROC)
+options(scipen = 100, digits = 3)
 library(tidyverse)
+library(furrr)
+library(patchwork)
 
 source("./99_utils.R")
 
@@ -13,10 +12,7 @@ nne <- 14
 # Simulation values:
 n_test <- 1000
 n_eval <- 40
-niter <- 1000
-
-# Set up parallel computing
-cl <- makeCluster(detectCores() - 2)
+niter <- 10000
 
 # Set up values for simulations
 combs <- expand.grid(
@@ -25,7 +21,10 @@ combs <- expand.grid(
   samp_size_multi = c(0.8, 1.0, 1.2)
 )
 
-results <- mclapply(1:nrow(combs), function(i){
+# Run in parallel using futures
+plan(multisession, workers = availableCores())
+
+results <- future_map(1:nrow(combs), function(i){
   params = combs[i,]
   run_sims(event_rate = params$event_rate, 
            auc = params$auc, 
@@ -34,7 +33,7 @@ results <- mclapply(1:nrow(combs), function(i){
 }
 )
 
-saveRDS(results, filename = "sim_results.RDS")
+saveRDS(results, file = "sim_results.RDS")
 
 # Do the samp_size_multi as a sensitivity analysis, just stick to the 1x multiplier for main analysis
 p <- bind_rows(results) |> 
@@ -52,11 +51,23 @@ p <- bind_rows(results) |>
             Sens_high = quantile(sensitivity, 0.75)) |>
   ggplot(aes(x = auc_model))
 
-p +
+(p +
   geom_line(aes(y = FP_cost_median, colour = strategy), linewidth = 1.2) +
   geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high, fill = strategy), alpha = 0.2) +
   facet_wrap(vars(event_rate_model)) +
   theme_bw() +
-  theme(panel.grid.minor = element_blank())
+  theme(panel.grid.minor = element_blank())) /
+(p +
+  geom_line(aes(y = PPV_median, colour = strategy), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = strategy), alpha = 0.2) +
+  facet_wrap(vars(event_rate_model)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())) /
+(p +
+  geom_line(aes(y = Sens_median, colour = strategy), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high, fill = strategy), alpha = 0.2) +
+  facet_wrap(vars(event_rate_model)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()))
 
 ggsave(filename = "Figure 1.jpg", height = 8, width = 6)

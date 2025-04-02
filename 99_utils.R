@@ -1,11 +1,12 @@
 ### Functions for simulation study
+library(tidyverse)
 
 # Helper function for ROC-based threshold
 # Obtain a cutpoint based on number needed to evaluate (NNE)
 # Equal to maximum tolerable number of false positives per true positive
 get_nne_threshold <- function(predictor, response, nne){
-  roc_curve = roc(predictor = predictor, response = response)
-  ppv = coords(roc_curve, x = "all", input = "threshold", ret = c("threshold", "ppv"))
+  roc_curve = pROC::roc(predictor = predictor, response = response)
+  ppv = pROC::coords(roc_curve, x = "all", input = "threshold", ret = c("threshold", "ppv"))
   ppv$nne = 1 / ppv$ppv
   cutpoint = min(ppv$threshold[ppv$nne == nne], na.rm = T) |> suppressWarnings()
   
@@ -37,6 +38,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
   set.seed(seed)
   # Run for loop 
   for (i in 1:niter) {
+    
     # Simulate model training data
     train = predictNMB::get_sample(
       auc = auc,
@@ -52,12 +54,12 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     train$predicted = predict(fit, type = "response")
     
     # Run predictNMB simulation
-    thresholds = get_thresholds(predicted = train$predicted, 
-                                actual = train$actual,
-                                nmb = c("TP" = nmb()[["TP"]],
-                                        "TN" = nmb()[["TN"]],
-                                        "FP" = nmb()[["FP"]],
-                                        "FN" = nmb()[["FN"]]))
+    thresholds = predictNMB::get_thresholds(predicted = train$predicted, 
+                                            actual = train$actual,
+                                            nmb = c("TP" = nmb()[["TP"]],
+                                                    "TN" = nmb()[["TN"]],
+                                                    "FP" = nmb()[["FP"]],
+                                                    "FN" = nmb()[["FN"]]))
     
     # Extract youden index cutpoints
     cutpoint_nmb = thresholds[["value_optimising"]]
@@ -67,7 +69,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     cutpoint_nne = get_nne_threshold(predictor = train$predicted, response = train$actual, nne = nne) |> suppressMessages()
     
     # Simulate model validation data - e.g., a 1000 bed hospital monitoring deteriorating patients
-    test = get_sample(auc, n_test, event_rate)
+    test = predictNMB::get_sample(auc, n_test, event_rate)
     test$predicted = predict(fit, type = "response", newdata = test)
     FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
       (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
