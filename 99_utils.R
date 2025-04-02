@@ -31,7 +31,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
   )
   
   # Get sample size requirements (once per input combination)
-  sampsize = pmsampsize::pmsampsize(type = "b", parameters = 1, prevalence = event_rate, cstatistic = auc)
+  sampsize = pmsampsize::pmsampsize(type = "b", parameters = 2, prevalence = event_rate, cstatistic = auc)
   
   results = list()
   set.seed(seed)
@@ -42,8 +42,9 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
       auc = auc,
       n_samples = sampsize$sample_size * samp_size_multi,
       prevalence = event_rate,
-      min_events = 0
+      min_events = ceiling(sampsize$events)
     )
+    
     # Fit model
     fit = glm(actual ~ x, data = train, family = binomial())
     
