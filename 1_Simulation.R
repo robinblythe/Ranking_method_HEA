@@ -46,28 +46,47 @@ p <- bind_rows(results) |>
             PPV_median = median(PPV),
             PPV_low = quantile(PPV, 0.25),
             PPV_high = quantile(PPV, 0.75),
-            Sens_median = median(sensitivity),
-            Sens_low = quantile(sensitivity, 0.25),
-            Sens_high = quantile(sensitivity, 0.75)) |>
+            Sens_median = median(Sensitivity),
+            Sens_low = quantile(Sensitivity, 0.25),
+            Sens_high = quantile(Sensitivity, 0.75)) |>
   ggplot(aes(x = auc_model))
 
-(p +
-  geom_line(aes(y = FP_cost_median, colour = strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high, fill = strategy), alpha = 0.2) +
-  facet_wrap(vars(event_rate_model)) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank())) /
-(p +
-  geom_line(aes(y = PPV_median, colour = strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = strategy), alpha = 0.2) +
-  facet_wrap(vars(event_rate_model)) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank())) /
-(p +
-  geom_line(aes(y = Sens_median, colour = strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high, fill = strategy), alpha = 0.2) +
-  facet_wrap(vars(event_rate_model)) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank()))
+g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
-ggsave(filename = "Figure 1.jpg", height = 8, width = 6)
+(p +
+  geom_line(aes(y = FP_cost_median, colour = Strategy), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high, fill = Strategy), alpha = 0.2) +
+  facet_wrap(vars(Prevalence), labeller = label_both) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none") +
+  scale_colour_manual(values = g_colours) +
+  scale_fill_manual(values = g_colours) +
+  labs(y = "False positive cost")) /
+(p +
+  geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Strategy), alpha = 0.2) +
+  facet_wrap(vars(Prevalence), labeller = label_both) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none") +
+  scale_colour_manual(values = g_colours) +
+  scale_fill_manual(values = g_colours) +
+  labs(y = "Positive Predictive Value")) /
+(p +
+  geom_line(aes(y = Sens_median, colour = Strategy), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high, fill = Strategy), alpha = 0.2) +
+  facet_wrap(vars(Prevalence), labeller = label_both) +
+  theme_bw() +
+  labs(x = "Model AUC",
+       y = "Sensitivity") +
+  scale_colour_manual(values = g_colours) +
+  scale_fill_manual(values = g_colours) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom"))
+
+ggsave(filename = "Figure 1.jpg", height = 8, width = 8)

@@ -80,7 +80,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     
     results[[i]] <- tibble(
       iter = i,
-      strategy = c("Youden", "NMB", "NNE", "Rank"),
+      Strategy = c("Youden", "NMB", "NNE", "Rank"),
       PPV = c(
         sum(sample_youden$actual)/n_eval,
         sum(sample_nmb$actual)/n_eval,
@@ -100,7 +100,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
         sum(sample_rank$actual == 0) * FP
       ),
       auc_model = auc,
-      event_rate_model = event_rate,
+      Prevalence = event_rate,
       pr_required_sampsize = samp_size_multi
     )
   }
@@ -110,40 +110,54 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
 
 
 
-
-### Functions for real data example (SERP)
-# Function to sample from data and return ranked/unranked datasets
-simulator <- function(data, n_samples, n_eval, max_iter) {
-  results_out <- list()
-  for (i in 1:max_iter) {
-    # Sample from data and take all patients with a score above t1 but below t3
-    df <- df_ed[sample(nrow(df_ed), n_samples), ] |>
-      filter(t1 == 1 & t3 == 0) |>
-      arrange(desc(pred_risk))
-
-    FP <- rgamma(nrow(df), shape = 110.314, scale = 0.172) * (3.19 * 0.85)
-    df$Cost <- FP
-
-    df_rand <- df |>
-      slice_sample(n = n_eval) |>
-      mutate(
-        iter = i,
-        Method = "Unranked"
+# Applied simulation function (SERP)
+run_serp <- function(niter, cutpoint, seed){
+  results <- list()
+  set.seed(seed)
+  for (i in 1:niter){
+    FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
+      (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
+    df_sample = df_ed[sample(nrow(df_ed), 150),]
+    df_positive = subset(df_sample, pred_risk >= cutpoint) |> arrange(desc(pred_risk))
+    
+    sample_25_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.25))
+    sample_50_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.50))
+    sample_75_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.75))
+    sample_25_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.25))
+    sample_50_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.50))
+    sample_75_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.75))
+    
+    results[[i]] <- tibble(
+      iter = i,
+      Strategy = c(rep("Ranked", 3), rep("Unranked", 3)),
+      Pct_evaluated = rep(c(25, 50, 75), 2),
+      PPV = c(
+        sum(sample_25_rank$outcome_died_30d)/nrow(sample_25_rank),
+        sum(sample_50_rank$outcome_died_30d)/nrow(sample_50_rank),
+        sum(sample_75_rank$outcome_died_30d)/nrow(sample_75_rank),
+        sum(sample_25_threshold$outcome_died_30d)/nrow(sample_25_threshold),
+        sum(sample_50_threshold$outcome_died_30d)/nrow(sample_50_threshold),
+        sum(sample_75_threshold$outcome_died_30d)/nrow(sample_75_threshold)
+      ),
+      Sensitivity = c(
+        sum(sample_25_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        sum(sample_50_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        sum(sample_75_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        sum(sample_25_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        sum(sample_50_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        sum(sample_75_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d)
+      ),
+      FP_cost = c(
+        sum(sample_25_rank$outcome_died_30d == 0) * FP,
+        sum(sample_50_rank$outcome_died_30d == 0) * FP,
+        sum(sample_75_rank$outcome_died_30d == 0) * FP,
+        sum(sample_25_threshold$outcome_died_30d == 0) * FP,
+        sum(sample_50_threshold$outcome_died_30d == 0) * FP,
+        sum(sample_75_threshold$outcome_died_30d == 0) * FP
       )
-
-    df_rank <- df |>
-      slice_head(n = n_eval) |>
-      mutate(
-        iter = i,
-        Method = "Ranked"
-      )
-
-    results_out[[i]] <- do.call(rbind, list(df_rand, df_rank))
+    )
   }
-
-  serp_results <- do.call(rbind, results_out)
-  serp_results$TP <- ifelse(serp_results$class_t1 == "TP", 1, 0)
-  serp_results$Cost <- if_else(serp_results$TP == 1, 0, serp_results$Cost)
-
-  return(serp_results)
+  
+  return(bind_rows(results))
+  
 }
