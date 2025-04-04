@@ -41,7 +41,7 @@ p <- preds |> ggplot()
    geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")) +
   plot_annotation(tag_levels = 'A')
      
-ggsave(filename = "Figure 2.jpg", height = 8, width = 6)
+ggsave(filename = "Figure 3.jpg", height = 8, width = 6)
 
 
 # Repeat simulation approach
@@ -110,7 +110,7 @@ p <- results |>
            legend.position = "bottom")) +
   plot_annotation(tag_levels = 'A')
 
-ggsave("Figure 3.jpg", height = 8, width = 4) 
+ggsave("Figure 4.jpg", height = 8, width = 4) 
 
 
 # Tabulate results
