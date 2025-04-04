@@ -46,10 +46,18 @@ p <- bind_rows(results) |>
             PPV_median = median(PPV),
             PPV_low = quantile(PPV, 0.25),
             PPV_high = quantile(PPV, 0.75),
-            Sens_median = median(Sensitivity),
-            Sens_low = quantile(Sensitivity, 0.25),
-            Sens_high = quantile(Sensitivity, 0.75)) |>
+            Sens_median = median(sensitivity),
+            Sens_low = quantile(sensitivity, 0.25),
+            Sens_high = quantile(sensitivity, 0.75)) |>
   ggplot(aes(x = auc_model))
+
+savings <- with(p$data,
+                c("Median savings" = FP_cost_median[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
+                    FP_cost_median[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05],
+                  "Savings (Low)" = FP_cost_low[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
+                    FP_cost_low[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05],
+                  "Savings (High)" = FP_cost_high[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
+                    FP_cost_high[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05]))
 
 g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
