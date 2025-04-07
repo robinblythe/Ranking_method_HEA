@@ -39,7 +39,7 @@ saveRDS(results, file = "sim_results.RDS")
 p <- bind_rows(results) |> 
   filter(pr_required_sampsize == 1) |>
   select(-pr_required_sampsize) |>
-  group_by(strategy, auc_model, event_rate_model) |>
+  group_by(Strategy, auc_model, Prevalence) |>
   summarise(FP_cost_median = median(FP_cost),
             FP_cost_low = quantile(FP_cost, 0.25),
             FP_cost_high = quantile(FP_cost, 0.75),
@@ -52,12 +52,12 @@ p <- bind_rows(results) |>
   ggplot(aes(x = auc_model))
 
 savings <- with(p$data,
-                c("Median savings" = FP_cost_median[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
-                    FP_cost_median[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05],
-                  "Savings (Low)" = FP_cost_low[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
-                    FP_cost_low[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05],
-                  "Savings (High)" = FP_cost_high[strategy == "Rank" & auc_model == 0.85 & event_rate_model == 0.05] - 
-                    FP_cost_high[strategy == "NMB" & auc_model == 0.85 & event_rate_model == 0.05]))
+                c("Median savings" = FP_cost_median[Strategy == "Rank" & auc_model == 0.85 & Prevalence == 0.05] - 
+                    FP_cost_median[Strategy == "NMB" & auc_model == 0.85 & Prevalence == 0.05],
+                  "Savings (Low)" = FP_cost_low[Strategy == "Rank" & auc_model == 0.85 & Prevalence == 0.05] - 
+                    FP_cost_low[Strategy == "NMB" & auc_model == 0.85 & Prevalence == 0.05],
+                  "Savings (High)" = FP_cost_high[Strategy == "Rank" & auc_model == 0.85 & Prevalence == 0.05] - 
+                    FP_cost_high[Strategy == "NMB" & auc_model == 0.85 & Prevalence == 0.05]))
 
 g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
@@ -98,3 +98,4 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
         legend.position = "bottom"))
 
 ggsave(filename = "Figure 2.jpg", height = 8, width = 8)
+

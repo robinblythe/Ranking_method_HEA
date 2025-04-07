@@ -44,7 +44,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
       auc = auc,
       n_samples = sampsize$sample_size * samp_size_multi,
       prevalence = event_rate,
-      min_events = ceiling(sampsize$events)
+      min_events = ceiling(sampsize$events) * samp_size_multi
     )
     
     # Fit model
