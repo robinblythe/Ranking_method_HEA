@@ -5,13 +5,13 @@ library(tidyverse)
 library(patchwork)
 
 # Load ED data
-df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
 
 # Assess external validity for 30d mortality (purpose of model) and ICU admission (not purpose of model)
 preds <- subset(df_ed, select = c("outcome_died_30d", "outcome_icu", "pred_risk"))
 # Convert to probabilities using logistic regression
 preds$pr_30d <- predict(glm(outcome_died_30d ~ pred_risk, family = binomial(), data = preds), type = "response")
-preds$pr_icu <- predict(glm(outcome_icu ~ pred_risk, family = binomial(), data = preds), type = "response")
+#preds$pr_icu <- predict(glm(outcome_icu ~ pred_risk, family = binomial(), data = preds), type = "response")
 
 # Plots for external validation
 p <- preds |> ggplot()
@@ -20,26 +20,28 @@ p <- preds |> ggplot()
   geom_smooth(aes(x = pr_30d, y = outcome_died_30d)) +
   geom_abline() +
   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
   theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
   ylab("Observed frequency") +
   xlab("Predicted probability") +
   geom_text(aes(x = 0.3, y = 0.9), label = paste0("Model AUC (30d mortality) = ", 
                                                    round(auc(predictor = preds$pr_30d, response = preds$outcome_died_30d)[[1]], 2))) +
   geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
   geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")) #delete this if wanting the combined figure/
-(p +
-   geom_histogram(aes(x = pr_icu, y = after_stat(count)/sum(after_stat(count))), alpha = 0.2, colour = "#999999") +
-   geom_smooth(aes(x = pr_icu, y = outcome_icu), colour = "red") +
-   geom_abline() +
-   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
-   theme_bw() +
-   ylab("Observed frequency") +
-   xlab("Predicted probability") +
-   geom_text(aes(x = 0.3, y = 0.9), label = paste0("Model AUC (ICU admission) = ", 
-                                                   round(auc(predictor = preds$pr_icu, response = preds$outcome_icu)[[1]], 2))) +
-   geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
-   geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")) +
-  plot_annotation(tag_levels = 'A')
+# (p +
+#    geom_histogram(aes(x = pr_icu, y = after_stat(count)/sum(after_stat(count))), alpha = 0.2, colour = "#999999") +
+#    geom_smooth(aes(x = pr_icu, y = outcome_icu), colour = "red") +
+#    geom_abline() +
+#    scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25)) +
+#    theme_bw() +
+#    ylab("Observed frequency") +
+#    xlab("Predicted probability") +
+#    geom_text(aes(x = 0.3, y = 0.9), label = paste0("Model AUC (ICU admission) = ", 
+#                                                    round(auc(predictor = preds$pr_icu, response = preds$outcome_icu)[[1]], 2))) +
+#    geom_text(aes(x = 0.4, y = 0.65), label = "Model underestimates risks") +
+#    geom_text(aes(x = 0.6, y = 0.25), label = "Model overestimates risks")) +
+#   plot_annotation(tag_levels = 'A')
      
 ggsave(filename = "Figure 3.jpg", height = 5, width = 6)
 
@@ -75,19 +77,20 @@ p <- results |>
 
 (p +
   geom_line(aes(y = FP_cost_median), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high), alpha = 0.3) +
+  geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high), alpha = 0.3, colour = NA) +
   scale_colour_manual(values = c("#003D7C", "#EF7C00")) +
   scale_fill_manual(values = c("#003D7C", "#EF7C00")) +
   scale_x_continuous(limits = c(25, 75), breaks = c(25, 50, 75)) +
+  scale_y_continuous(labels = scales::dollar_format(big.mark = ",")) +
   theme_bw() +
-  labs(y = "False positive cost ($SGD)") +
+  labs(y = "False positive cost (SGD)") +
   theme(panel.grid.minor = element_blank(),
         legend.position = "none",
         axis.title.x = element_blank(),
         axis.text.x = element_blank())) /
 (p +
    geom_line(aes(y = PPV_median), linewidth = 1.2) +
-   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high), alpha = 0.3) +
+   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high), alpha = 0.3, colour = NA) +
    scale_colour_manual(values = c("#003D7C", "#EF7C00")) +
    scale_fill_manual(values = c("#003D7C", "#EF7C00")) +
    scale_x_continuous(limits = c(25, 75), breaks = c(25, 50, 75)) +
@@ -99,7 +102,7 @@ p <- results |>
          axis.text.x = element_blank())) /
   (p +
      geom_line(aes(y = Sens_median), linewidth = 1.2) +
-     geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high), alpha = 0.3) +
+     geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high), alpha = 0.3, colour = NA) +
      scale_colour_manual(values = c("#003D7C", "#EF7C00")) +
      scale_fill_manual(values = c("#003D7C", "#EF7C00")) +
      scale_x_continuous(limits = c(25, 75), breaks = c(25, 50, 75)) +

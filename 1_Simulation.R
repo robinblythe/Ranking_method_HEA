@@ -70,9 +70,11 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         legend.position = "none") +
+  scale_y_continuous(labels = scales::dollar_format(big.mark = ",")) +
+  scale_x_continuous(limits = c(0.65, 0.95), breaks = seq(0.65, 0.95, 0.1)) +
   scale_colour_manual(values = g_colours) +
   scale_fill_manual(values = g_colours) +
-  labs(y = "False positive cost")) /
+  labs(y = "False positive cost (SGD)")) /
 (p +
   geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Strategy), alpha = 0.2) +
@@ -82,6 +84,7 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         legend.position = "none") +
+  scale_x_continuous(limits = c(0.65, 0.95), breaks = seq(0.65, 0.95, 0.1)) +
   scale_colour_manual(values = g_colours) +
   scale_fill_manual(values = g_colours) +
   labs(y = "Positive Predictive Value")) /
@@ -92,6 +95,7 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
   theme_bw() +
   labs(x = "Model AUC",
        y = "Sensitivity") +
+  scale_x_continuous(limits = c(0.65, 0.95), breaks = seq(0.65, 0.95, 0.1)) +
   scale_colour_manual(values = g_colours) +
   scale_fill_manual(values = g_colours) +
   theme(panel.grid.minor = element_blank(),

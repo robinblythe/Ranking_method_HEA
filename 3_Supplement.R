@@ -34,9 +34,10 @@ p2 <- results |>
           axis.title.x = element_blank(),
           axis.text.x = element_blank(),
           legend.position = "none") +
+    scale_y_continuous(labels = scales::dollar_format(big.mark = ",")) +
     scale_colour_manual(values = g_colours) +
     scale_fill_manual(values = g_colours) +
-    labs(y = "False positive cost") +
+    labs(y = "False positive cost (SGD)") +
     ggtitle("Underpowered: Sample size 80% of required sample")) /
   (p1 +
      geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
@@ -74,9 +75,10 @@ ggsave(filename = "Figure S1.jpg", width = 8, height = 8)
           axis.title.x = element_blank(),
           axis.text.x = element_blank(),
           legend.position = "none") +
+    scale_y_continuous(labels = scales::dollar_format(big.mark = ",")) +
     scale_colour_manual(values = g_colours) +
     scale_fill_manual(values = g_colours) +
-    labs(y = "False positive cost") +
+    labs(y = "False positive cost (SGD)") +
     ggtitle("Overpowered: Sample size 120% of required sample")) /
   (p2 +
      geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
