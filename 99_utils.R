@@ -72,11 +72,10 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     test = predictNMB::get_sample(auc, n_test, event_rate)
     test$predicted_calibrated = predict(fit, type = "response", newdata = test)
     
+    # Induce miscalibration if specified
     test = test |> mutate(predicted = case_when(
       miscalibration == "underestimates" ~ predicted_calibrated^alpha,
       miscalibration == "overestimates" ~ 1 - (1 - predicted_calibrated)^alpha,
-      miscalibration == "both" & predicted_calibrated < 0.04 ~ predicted_calibrated^alpha,
-      miscalibration == "both" & predicted_calibrated >= 0.04 ~ 1 - (1 - predicted_calibrated)^alpha,
       .default = predicted_calibrated
     ))
     

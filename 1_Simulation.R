@@ -13,13 +13,14 @@ nne <- 14
 n_test <- 1000
 n_eval <- 40
 niter <- 10000
-alpha <- 3
+alpha <- 1.5
+seed <- 888
 
 # Set up values for simulations
 combs <- expand.grid(
   event_rate = c(0.01, 0.05, 0.1),
   auc = c(0.65, 0.75, 0.85, 0.95),
-  miscalibration = c("none", "underestimates", "overestimates", "both")
+  miscalibration = c("none", "underestimates", "overestimates")
 )
 
 # Run in parallel using futures
@@ -29,17 +30,17 @@ results <- future_map(1:nrow(combs), function(i){
   params = combs[i,]
   run_sims(event_rate = params$event_rate, 
            auc = params$auc, 
-           samp_size_multi = params$samp_size_multi, 
-           niter = niter, n_test = n_test, n_eval = n_eval, seed = 888)
-}
+           miscalibration = params$miscalibration, 
+           niter = niter, n_test = n_test, n_eval = n_eval, seed = seed)
+}, .options = furrr_options(seed = TRUE)
 )
 
 saveRDS(results, file = "sim_results.RDS")
 
-# Do the samp_size_multi as a sensitivity analysis, just stick to the 1x multiplier for main analysis
+# Miscalibration is explored in the sensitivity analysis
 p <- bind_rows(results) |> 
-  filter(pr_required_sampsize == 1) |>
-  select(-pr_required_sampsize) |>
+  filter(Miscalibration == "none") |>
+  select(-Miscalibration) |>
   group_by(Strategy, auc_model, Prevalence) |>
   summarise(FP_cost_median = median(FP_cost),
             FP_cost_low = quantile(FP_cost, 0.25),
