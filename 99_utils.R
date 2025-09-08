@@ -14,7 +14,7 @@ get_nne_threshold <- function(predictor, response, nne){
 }
 
 # Main simulation function to repeat the analysis across different event rates, aucs, sample sizes
-run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, seed) {
+run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, seed) {
   
   # Set up health economic helper function for predictNMB value-optimising cutpoint
   wtp <- 45000
@@ -42,9 +42,9 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     # Simulate model training data
     train = predictNMB::get_sample(
       auc = auc,
-      n_samples = sampsize$sample_size * samp_size_multi,
+      n_samples = sampsize$sample_size,
       prevalence = event_rate,
-      min_events = ceiling(sampsize$events) * samp_size_multi
+      min_events = ceiling(sampsize$events)
     )
     
     # Fit model
@@ -70,7 +70,16 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     
     # Simulate model validation data - e.g., a 1000 bed hospital monitoring deteriorating patients
     test = predictNMB::get_sample(auc, n_test, event_rate)
-    test$predicted = predict(fit, type = "response", newdata = test)
+    test$predicted_calibrated = predict(fit, type = "response", newdata = test)
+    
+    test = test |> mutate(predicted = case_when(
+      miscalibration == "underestimates" ~ predicted_calibrated^alpha,
+      miscalibration == "overestimates" ~ 1 - (1 - predicted_calibrated)^alpha,
+      miscalibration == "both" & predicted_calibrated < 0.04 ~ predicted_calibrated^alpha,
+      miscalibration == "both" & predicted_calibrated >= 0.04 ~ 1 - (1 - predicted_calibrated)^alpha,
+      .default = predicted_calibrated
+    ))
+    
     FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
       (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
     sample_youden = subset(test, predicted >= cutpoint_youden) |> slice_sample(n = n_eval)
@@ -81,6 +90,7 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
     results[[i]] <- tibble(
       iter = i,
       Strategy = c("Youden", "NMB", "NNE", "Rank"),
+      Threshold = c(cutpoint_youden, cutpoint_nmb, cutpoint_nne, NA),
       PPV = c(
         sum(sample_youden$actual)/n_eval,
         sum(sample_nmb$actual)/n_eval,
@@ -101,10 +111,9 @@ run_sims <- function(event_rate, auc, samp_size_multi, niter, n_test, n_eval, se
       ),
       auc_model = auc,
       Prevalence = event_rate,
-      pr_required_sampsize = samp_size_multi
+      Miscalibration = miscalibration
     )
   }
-  
   return(bind_rows(results))
 }
 

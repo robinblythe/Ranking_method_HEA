@@ -13,12 +13,13 @@ nne <- 14
 n_test <- 1000
 n_eval <- 40
 niter <- 10000
+alpha <- 3
 
 # Set up values for simulations
 combs <- expand.grid(
   event_rate = c(0.01, 0.05, 0.1),
   auc = c(0.65, 0.75, 0.85, 0.95),
-  samp_size_multi = c(0.8, 1.0, 1.2)
+  miscalibration = c("none", "underestimates", "overestimates", "both")
 )
 
 # Run in parallel using futures
@@ -61,20 +62,6 @@ savings <- with(p$data,
 
 g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
-(p +
-  geom_line(aes(y = FP_cost_median, colour = Strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = FP_cost_low, ymax = FP_cost_high, fill = Strategy), alpha = 0.2) +
-  facet_wrap(vars(Prevalence), labeller = label_both) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank(), 
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        legend.position = "none") +
-  scale_y_continuous(labels = scales::dollar_format(big.mark = ",")) +
-  scale_x_continuous(limits = c(0.65, 0.95), breaks = seq(0.65, 0.95, 0.1)) +
-  scale_colour_manual(values = g_colours) +
-  scale_fill_manual(values = g_colours) +
-  labs(y = "False positive cost (SGD)")) /
 (p +
   geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Strategy), alpha = 0.2) +
