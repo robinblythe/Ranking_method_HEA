@@ -78,9 +78,8 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
       miscalibration == "overestimates" ~ 1 - (1 - predicted_calibrated)^alpha,
       .default = predicted_calibrated
     ))
-    
-    FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
-      (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
+
+    #FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 + (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
     sample_youden = subset(test, predicted >= cutpoint_youden) |> slice_sample(n = n_eval)
     sample_nmb = subset(test, predicted >= cutpoint_nmb) |> slice_sample(n = n_eval)
     sample_nne = subset(test, predicted >= cutpoint_nne) |> slice_sample(n = n_eval)
@@ -102,17 +101,23 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
         sum(sample_nne$actual)/sum(test$actual),
         sum(sample_rank$actual)/sum(test$actual)
       ),
-      N_evaluated = c(
-       nrow(sample_youden),
-       nrow(sample_nmb),
-       nrow(sample_nne),
-       nrow(sample_rank)
+      N_false_positives = c(
+       sum(sample_youden$actual == 0),
+       sum(sample_nmb$actual == 0),
+       sum(sample_nne$actual == 0),
+       sum(sample_rank$actual == 0)
       ),
       False_positive_rate = c(
-        1 - mean(sample_youden$actual),
-        1 - mean(sample_nmb$actual),
-        1 - mean(sample_nne$actual),
-        1 - mean(sample_rank$actual)
+       mean(sample_youden$actual == 0),
+       mean(sample_nmb$actual == 0),
+       mean(sample_nne$actual == 0),
+       mean(sample_rank$actual == 0)
+      ),
+      N_false_negatives = c(
+        sum(test$actual == 1) - sum(sample_youden$actual == 1),
+        sum(test$actual == 1) - sum(sample_nmb$actual == 1),
+        sum(test$actual == 1) - sum(sample_nne$actual == 1),
+        sum(test$actual == 1) - sum(sample_rank$actual == 1)
       ),
       auc_model = auc,
       Prevalence = event_rate,
