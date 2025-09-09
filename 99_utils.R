@@ -81,11 +81,11 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     sample_nmb = subset(test, predicted >= cutpoint_nmb) |> slice_sample(n = n_eval)
     sample_nne = subset(test, predicted >= cutpoint_nne) |> slice_sample(n = n_eval)
     sample_rank = test |> arrange(desc(predicted)) |> slice_head(n = n_eval)
+    browser()
     
     results[[i]] <- tibble(
       iter = i,
       Strategy = c("Youden", "NMB", "NNE", "Rank"),
-      Threshold = c(cutpoint_youden, cutpoint_nmb, cutpoint_nne, NA),
       PPV = c(
         sum(sample_youden$actual)/n_eval,
         sum(sample_nmb$actual)/n_eval,
@@ -98,23 +98,17 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
         sum(sample_nne$actual)/sum(test$actual),
         sum(sample_rank$actual)/sum(test$actual)
       ),
-      N_false_positives = c(
-       sum(sample_youden$actual == 0),
-       sum(sample_nmb$actual == 0),
-       sum(sample_nne$actual == 0),
-       sum(sample_rank$actual == 0)
+      Mean_rank = c(
+       mean(which(sample_youden$actual == 1)),
+       mean(which(sample_nmb$actual == 1)),
+       mean(which(sample_nne$actual == 1)),
+       mean(which(sample_rank$actual == 1))
       ),
-      False_positive_rate = c(
-       mean(sample_youden$actual == 0),
-       mean(sample_nmb$actual == 0),
-       mean(sample_nne$actual == 0),
-       mean(sample_rank$actual == 0)
-      ),
-      N_false_negatives = c(
-        sum(test$actual == 1) - sum(sample_youden$actual == 1),
-        sum(test$actual == 1) - sum(sample_nmb$actual == 1),
-        sum(test$actual == 1) - sum(sample_nne$actual == 1),
-        sum(test$actual == 1) - sum(sample_rank$actual == 1)
+      Mean_risk = c(
+        mean(sample_youden$predicted),
+        mean(sample_nmb$predicted),
+        mean(sample_nne$predicted),
+        mean(sample_rank$predicted)
       ),
       auc_model = auc,
       Prevalence = event_rate,
