@@ -102,11 +102,17 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
         sum(sample_nne$actual)/sum(test$actual),
         sum(sample_rank$actual)/sum(test$actual)
       ),
-      FP_cost = c(
-        sum(sample_youden$actual == 0) * FP,
-        sum(sample_nmb$actual == 0) * FP,
-        sum(sample_nne$actual == 0) * FP,
-        sum(sample_rank$actual == 0) * FP
+      N_evaluated = c(
+       nrow(sample_youden),
+       nrow(sample_nmb),
+       nrow(sample_nne),
+       nrow(sample_rank)
+      ),
+      False_positive_rate = c(
+        1 - mean(sample_youden$actual),
+        1 - mean(sample_nmb$actual),
+        1 - mean(sample_nne$actual),
+        1 - mean(sample_rank$actual)
       ),
       auc_model = auc,
       Prevalence = event_rate,
