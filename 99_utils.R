@@ -1,6 +1,3 @@
-### Functions for simulation study
-library(tidyverse)
-
 # Helper function for ROC-based threshold
 # Obtain a cutpoint based on number needed to evaluate (NNE)
 # Equal to maximum tolerable number of false positives per true positive
@@ -26,7 +23,7 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     # QALYs lost due to deterioration event
     qalys_lost = 0.03,
     # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-    high_risk_group_treatment_cost = (3.19 * 0.85 * 1.03 * 19) + ((1 - 0.910) * (14134 * 0.85) * (1.03)^4 * event_rate),
+    high_risk_group_treatment_cost = (1.50 * 19) + ((1 - 0.910) * (14134 * 0.85) * (1.03)^4 * event_rate),
     # Chance of successful intervention
     high_risk_group_treatment_effect = 1 - 0.910
   )
@@ -134,8 +131,15 @@ run_serp <- function(niter, cutpoint, seed){
   results <- list()
   set.seed(seed)
   for (i in 1:niter){
-    FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 +
-      (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
+    
+    # Study costs originally reported in AUD at different time points
+    # Converted from base year to 2025 (Cost * (1.03)^(2025 - year))
+    # Converted from AUD to SGD (1 AUD = 0.85 SGD as of 9 September 2025)
+    deterioration_cost = rnorm(1, 14345, 696) # see Curtis et al
+    
+    FP = rgamma(1, shape = 110.314, scale = 0.172) * 1.50 + # cost of clinical time - see Mudiyaselange et al who report 2016 costs
+      (event_rate * (1 - rnorm(1, 0.910, 0.036)) * deterioration_cost) # opportunity cost
+    FN = deterioration_cost
     df_sample = df_ed[sample(nrow(df_ed), 150),]
     df_positive = subset(df_sample, pred_risk >= cutpoint) |> arrange(desc(pred_risk))
     
@@ -166,13 +170,19 @@ run_serp <- function(niter, cutpoint, seed){
         sum(sample_50_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
         sum(sample_75_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d)
       ),
-      FP_cost = c(
-        sum(sample_25_rank$outcome_died_30d == 0) * FP,
-        sum(sample_50_rank$outcome_died_30d == 0) * FP,
-        sum(sample_75_rank$outcome_died_30d == 0) * FP,
-        sum(sample_25_threshold$outcome_died_30d == 0) * FP,
-        sum(sample_50_threshold$outcome_died_30d == 0) * FP,
-        sum(sample_75_threshold$outcome_died_30d == 0) * FP
+      Misclassification_cost = c(
+        sum(sample_25_rank$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_25_rank$outcome_died_30d == 1)) * FN,
+        sum(sample_50_rank$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_50_rank$outcome_died_30d == 1)) * FN,
+        sum(sample_75_rank$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_75_rank$outcome_died_30d == 1)) * FN,
+        sum(sample_25_threshold$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_25_threshold$outcome_died_30d == 1)) * FN,
+        sum(sample_50_threshold$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_50_threshold$outcome_died_30d == 1)) * FN,
+        sum(sample_75_threshold$outcome_died_30d == 0) * FP + 
+          (sum(df_sample$outcome_died_30d == 1) - sum(sample_75_threshold$outcome_died_30d == 1)) * FN
       )
     )
   }

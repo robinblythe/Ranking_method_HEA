@@ -5,7 +5,7 @@ library(tidyverse)
 library(patchwork)
 
 # Load ED data
-df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
 
 # Assess external validity for 30d mortality (purpose of model) and ICU admission (not purpose of model)
 preds <- subset(df_ed, select = c("outcome_died_30d", "outcome_icu", "pred_risk"))
