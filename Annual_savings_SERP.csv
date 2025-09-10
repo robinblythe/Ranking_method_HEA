@@ -1,4 +1,4 @@
-% of patients evaluated,Savings (annual),95% interval
-25,"$14,678,492","[$13,415,030, $16,268,448]"
-50,"$15,789,134","[$13,484,400, $17,389,141]"
-75,"$9,636,470","[$10,908,676, $7,994,216]"
+% of patients evaluated,"Savings (false positive costs, annual)","Savings (misclassification costs, annual)","IQR (false positives costs, annual)","IQR (misclassification costs, annual)"
+25,"$96,252","$14,678,492","[$82,059.45, $104,009]","[$13,415,030, $16,268,448]"
+50,"$102,156","$15,789,134","[$74,597.88, $112,503]","[$13,484,400, $17,389,141]"
+75,"$57,914","$9,636,470","[$42,031.75, $65,706]","[$10,908,676, $7,994,216]"

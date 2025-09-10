@@ -164,6 +164,14 @@ run_serp <- function(niter, cutpoint, seed){
         sum(sample_50_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
         sum(sample_75_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d)
       ),
+      FP_cost = c(
+        sum(sample_25_rank$outcome_died_30d == 0) * FP,
+        sum(sample_50_rank$outcome_died_30d == 0) * FP,
+        sum(sample_75_rank$outcome_died_30d == 0) * FP,
+        sum(sample_25_threshold$outcome_died_30d == 0) * FP,
+        sum(sample_50_threshold$outcome_died_30d == 0) * FP,
+        sum(sample_75_threshold$outcome_died_30d == 0) * FP
+      ),
       Misclassification_cost = c(
         sum(sample_25_rank$outcome_died_30d == 0) * FP + 
           (sum(df_sample$outcome_died_30d == 1) - sum(sample_25_rank$outcome_died_30d == 1)) * FN,
