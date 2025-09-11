@@ -17,13 +17,13 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
   wtp <- 45000
   nmb = predictNMB::get_nmb_sampler(
     # Cost of ICU admission
-    outcome_cost = (14134 * 0.85) * (1.03)^4,
+    outcome_cost = (14345 * 0.85) * (1.03)^4,
     # Willingness to pay per QALY
     wtp = wtp,
     # QALYs lost due to deterioration event
     qalys_lost = 0.03,
     # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-    high_risk_group_treatment_cost = (1.50 * 19) + ((1 - 0.910) * (14134 * 0.85) * (1.03)^4 * event_rate),
+    high_risk_group_treatment_cost = (1.50 * 19) + ((1 - 0.910) * (14345 * 0.85) * (1.03)^4 * event_rate),
     # Chance of successful intervention
     high_risk_group_treatment_effect = 1 - 0.910
   )
