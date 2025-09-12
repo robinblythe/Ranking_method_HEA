@@ -115,5 +115,5 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
   theme(panel.grid.minor = element_blank(),
         legend.position = "bottom"))
 
-ggsave(filename = "Figure 2.jpg", height = 10, width = 8)
+ggsave(filename = "./Figures/Figure 2.jpg", height = 10, width = 8)
 

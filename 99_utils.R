@@ -17,7 +17,7 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
   wtp <- 45000
   nmb = predictNMB::get_nmb_sampler(
     # Cost of ICU admission
-    outcome_cost = (14345 * 0.85) * (1.03)^4,
+    outcome_cost = 14345,
     # Willingness to pay per QALY
     wtp = wtp,
     # QALYs lost due to deterioration event
@@ -81,8 +81,7 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     sample_nmb = subset(test, predicted >= cutpoint_nmb) |> slice_sample(n = n_eval)
     sample_nne = subset(test, predicted >= cutpoint_nne) |> slice_sample(n = n_eval)
     sample_rank = test |> arrange(desc(predicted)) |> slice_head(n = n_eval)
-    browser()
-    
+
     results[[i]] <- tibble(
       iter = i,
       Strategy = c("Youden", "NMB", "NNE", "Rank"),

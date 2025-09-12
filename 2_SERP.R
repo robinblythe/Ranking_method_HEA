@@ -5,7 +5,7 @@ library(tidyverse)
 library(patchwork)
 
 # Load ED data
-df_ed <- readRDS("C:/Users/blythe/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
 
 # Assess external validity for 30d mortality (purpose of model) and ICU admission (not purpose of model)
 preds <- subset(df_ed, select = c("outcome_died_30d", "outcome_icu", "pred_risk"))
@@ -115,7 +115,7 @@ p <- results |>
      theme(panel.grid.minor = element_blank(),
            legend.position = "bottom"))
 
-ggsave("Figure 4.jpg", height = 8, width = 4) 
+ggsave("./Figures/Figure 4.jpg", height = 8, width = 4) 
 
 
 # Tabulate results
