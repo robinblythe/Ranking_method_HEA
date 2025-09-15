@@ -150,7 +150,7 @@ cutpoint_nne <- min(ppv$threshold[ppv$nne == nne], na.rm = T)
 
 Note that sometimes, just due to sampling variation and our starting conditions, the threshold will be infinitely low. In these cases, we just want to replace it with 0 (we want to evaluate every patient). We can create a helper function that just smooths out this whole process for us:
 
-```{r}
+```{r, eval = FALSE}
 get_nne_threshold <- function(predictor, response, nne) {
   roc_curve <- roc(predictor = predictor, response = response)
   ppv <- coords(
@@ -214,6 +214,7 @@ Recall that the point of this exercise was to determine the utility of the conti
 Interestingly, the NMB and NNE thresholds were high enough that only patients with a predicted risk of 0.025 or above - i.e., 2.5 times the prevalence - were included. Also interesting was that, due to our low AUC, neither patient actually experienced the event. We got a 100% false positive rate; the perils of using bad models. The Youden index was far more sensitive in that it picked up 40 patients, 2 of which ended up deteriorating. Our ranked set also picked up these two patients. We can summarise our results to also check the positive predictive value (PPV: the proportion of true positives out of all patients flagged as high risk), the sensitivity (the proportion of true positives out of everyone who went on to experience the event), and some details about the relative priority of each positive patient and their predicted risk.
 
 ```{r}
+set.seed(888)
 d_subsets <- test |>
   arrange(desc(predicted_calibrated)) |>
   mutate(
@@ -228,16 +229,25 @@ d_subsets <- test |>
     values_to = "above_threshold",
     names_transform = ~ str_remove(.x, "_pos")
   ) |>
-  filter(above_threshold)
+  filter(above_threshold) |>
+  group_by(method) |>
+  mutate(
+    rank_rand = sample(1:n(), n(), replace = F)
+  ) |>
+  filter(rank_rand <= n_eval) 
 
 results <- d_subsets |>
   summarise(
-    .by = method,
     ppv = sum(actual) / n_eval,
     sensitivity = sum(actual) / sum(test$actual),
-    mean_rank = mean(which(actual == 1)),
-    mean_risk = mean(predicted_calibrated)
-  ) |>
+    mean_rank = if (unique(method) == "rank") {
+      mean(row_number()[actual == 1])
+      } else {
+        mean(rank_rand[actual == 1])
+        },
+    mean_risk = mean(predicted_calibrated),
+    .groups = "drop"
+    ) |>
   mutate(
     auc_model = auc,
     Prevalence = event_rate,
@@ -246,12 +256,12 @@ results <- d_subsets |>
 results
 ```
 
-We can see that in this iteration of the simulation, we got some fairly interesting results. The PPV for the NMB and NNE thresholds was 0 (we didn't get any true positives), and it was a not-great 0.05 for the other two. We would need to see an average of 1/0.05, or 20 patients if we randomly picked from the patients in the dataset. The sensitivity was 0.2 for the Youden and Ranking methods, indicating we missed 80% of the true positives. Most clinicians would consider this unacceptable, and this is a sign that we probably shouldn't be using this model.
+We can see that in this iteration of the simulation, we got some fairly interesting results. The PPV for the NMB and NNE thresholds was 0 (we didn't get any true positives), a slightly better 0.025 for the Youden threshold, and a not-great 0.05 for the ranking method. We would need to see an average of 1/0.05, or 20 patients if we randomly picked from the patients in the ranked set, and twice that for a random set of patients in the set derived by the Youden index. The sensitivity was 0.2 for the Ranking methods, indicating we missed 80% of the true positives. Most clinicians would consider this unacceptable, and this is a sign that we probably shouldn't be using this model.
 
 However, the most interesting result comes from the mean ranking. As we note above, a PPV of 0.05 means you need to see 20 patients to get a true positive, assuming you see patients randomly. As soon as we rank patients by their predicted risk, this drops dramatically; the average rank of our positive cases - even with a poorly performing model - is 5. We can see this in the sample data.
 
 ```{r}
-which(d_subsets$actual[d_subsets$method == "youden"] == 1)
+d_subsets$rank_rand[d_subsets$method == "youden" & d_subsets$actual == 1]
 which(d_subsets$actual[d_subsets$method == "rank"] == 1)
 ```
 
