@@ -104,7 +104,7 @@ nmb <- get_nmb_sampler(
   #     outcome cost * underlying p0
   #   )
   high_risk_group_treatment_cost = (1.50 * 19) +
-    ((1 - 0.910) * (14345 * 0.85) * (1.03)^4 * event_rate),
+    ((1 - 0.910) * 14345 * event_rate),
   # Chance of successful intervention
   high_risk_group_treatment_effect = 1 - 0.910
 )
@@ -193,7 +193,7 @@ train |>
 
 ### Inducing miscalibration
 
-If we were interested in the effect of miscalibration - beyond the differences we see when moving from training to testing - we can apply some systematic (monotonic) miscalibration through a power transformation. Let's say we want to induce risk overestimation in our training data using an alpha value of 3 - larger values induce more miscalibration:
+If we were interested in the effect of miscalibration - beyond the differences we see when moving from training to testing - we can apply some systematic (monotonic) miscalibration through a power transformation. Let's say we want to induce risk overestimation in our training data using an alpha value of 3 - larger values induce more miscalibration.
 
 ```{r, message=FALSE}
 alpha <- 3
@@ -231,7 +231,7 @@ d_subsets <- test |>
   filter(above_threshold)
 
 results <- d_subsets |>
-  summarize(
+  summarise(
     .by = method,
     ppv = sum(actual) / n_eval,
     sensitivity = sum(actual) / sum(test$actual),
@@ -383,7 +383,7 @@ p +
 
 ## Worked example (SERP model)
 
-The methods from the manuscript document how we repeated a similar analytical process for the worked example. The main differences in the example were that the prevalence, AUC, and cut-off were fixed; this allowed us to examine the payoffs in the context of different capacity constraints. Where we had previously fixed the level of resource constraints at 0.4, in the example we varied these from 0.25 to 0.50 to 0.75. Likewise, our main payoff was actually an estimate of the false positive costs saved by ranking.
+The methods from the manuscript document how we repeated a similar analytical process for the worked example. The main differences in the example were that the prevalence, AUC, and cut-off were fixed; this allowed us to examine the payoffs in the context of different capacity constraints. Where we had previously fixed the level of resource constraints at 0.04, in the example we varied these from 0.25 to 0.50 to 0.75. Likewise, our main payoff was actually an estimate of the false positive costs saved by ranking.
 
 There were two components going on that created sampling variation: bootstrapping and Monte Carlo simulation.
 
