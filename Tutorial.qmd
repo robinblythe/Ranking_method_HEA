@@ -319,11 +319,7 @@ results <- bind_rows(readRDS(file = "sim_results.RDS")) |>
   summarise(
     .by = c(Method, auc_model, Prevalence, Miscalibration),
     Mean_rank = median(Mean_rank),
-    Mean_rank_low = quantile(Mean_rank, 0.25),
-    Mean_rank_high = quantile(Mean_rank, 0.75),
     Mean_risk = median(Mean_risk),
-    Mean_risk_low = quantile(Mean_risk, 0.25),
-    Mean_risk_high = quantile(Mean_risk, 0.75),
     PPV_median = median(ppv),
     PPV_low = quantile(ppv, 0.25),
     PPV_high = quantile(ppv, 0.75),
