@@ -1,5 +1,3 @@
-options(scipen = 100, digits = 5)
-
 library(pROC)
 library(tidyverse)
 library(patchwork)
@@ -11,7 +9,6 @@ df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Danie
 preds <- subset(df_ed, select = c("outcome_died_30d", "outcome_icu", "pred_risk"))
 # Convert to probabilities using logistic regression
 preds$pr_30d <- predict(glm(outcome_died_30d ~ pred_risk, family = binomial(), data = preds), type = "response")
-#preds$pr_icu <- predict(glm(outcome_icu ~ pred_risk, family = binomial(), data = preds), type = "response")
 
 # Plots for external validation
 p <- preds |> ggplot()
@@ -62,7 +59,11 @@ results <- run_serp(niter = niter, cutpoint = cutpoint, seed = 888)
 saveRDS(results, file = "serp_results.rds")
 
 # Visualise results
-p <- results |>
+df_summary <- results |>
+  mutate(Strategy = ifelse(grepl("unranked", constraint),
+                           "Unranked", "Ranked"),
+         Pct_evaluated = as.double(substr(constraint, 5, 6))
+         ) |>
   group_by(Strategy, Pct_evaluated) |>
   summarise(FP_cost_median = median(FP_cost),
             FP_cost_low = quantile(FP_cost, 0.25),
@@ -75,7 +76,9 @@ p <- results |>
             PPV_high = quantile(PPV, 0.75),
             Sens_median = median(Sensitivity, na.rm = T),
             Sens_low = quantile(Sensitivity, 0.25, na.rm = T),
-            Sens_high = quantile(Sensitivity, 0.75, na.rm = T)) |>
+            Sens_high = quantile(Sensitivity, 0.75, na.rm = T)) 
+
+p <- df_summary|>
   ggplot(aes(x = Pct_evaluated, colour = Strategy, fill = Strategy))
 
 (p +

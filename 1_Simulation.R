@@ -1,5 +1,4 @@
 # Set up study
-options(scipen = 100, digits = 3)
 library(tidyverse)
 library(furrr)
 library(patchwork)
@@ -13,7 +12,7 @@ nne <- 14
 n_test <- 1000
 n_eval <- 40
 niter <- 10000
-alpha <- 1.5
+alpha <- 3
 seed <- 888
 
 # Set up values for simulations
@@ -38,12 +37,12 @@ results <- future_map(1:nrow(combs), function(i){
 saveRDS(results, file = "sim_results.RDS")
 
 # Miscalibration is explored in the sensitivity analysis
-p <- bind_rows(results) |> 
+df_summary <- bind_rows(results) |>
   filter(Miscalibration == "none") |>
   select(-Miscalibration) |>
-  mutate(Mean_rank = ifelse(is.nan(Mean_rank), Inf, Mean_rank),
-         Mean_risk = ifelse(is.nan(Mean_risk), 0, Mean_risk)) |>
-  group_by(Strategy, auc_model, Prevalence) |>
+  mutate(Mean_rank = ifelse(is.nan(mean_rank), Inf, mean_rank),
+         Mean_risk = ifelse(is.nan(mean_risk), 0, mean_risk)) |>
+  group_by(Method, auc_model, Prevalence) |>
   summarise(
     Mean_rank = median(Mean_rank),
     Mean_rank_low = quantile(Mean_rank, 0.25),
@@ -51,20 +50,22 @@ p <- bind_rows(results) |>
     Mean_risk = median(Mean_risk),
     Mean_risk_low = quantile(Mean_risk, 0.25),
     Mean_risk_high = quantile(Mean_risk, 0.75),
-    PPV_median = median(PPV),
-    PPV_low = quantile(PPV, 0.25),
-    PPV_high = quantile(PPV, 0.75),
+    PPV_median = median(ppv),
+    PPV_low = quantile(ppv, 0.25),
+    PPV_high = quantile(ppv, 0.75),
     Sens_median = median(sensitivity),
     Sens_low = quantile(sensitivity, 0.25),
-    Sens_high = quantile(sensitivity, 0.75)) |>
+    Sens_high = quantile(sensitivity, 0.75))
+
+p <- df_summary |>
   ggplot(aes(x = auc_model))
 
 g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
 
 (p +
-    geom_line(aes(y = Mean_rank, colour = Strategy), linewidth = 1.2) +
-    geom_ribbon(aes(ymin = Mean_rank_low, ymax = Mean_rank_high, fill = Strategy), alpha = 0.2) +
+    geom_line(aes(y = Mean_rank, colour = Method), linewidth = 1.2) +
+    geom_ribbon(aes(ymin = Mean_rank_low, ymax = Mean_rank_high, fill = Method), alpha = 0.2) +
     facet_wrap(vars(Prevalence), labeller = label_both) +
     theme_bw() +
     theme(panel.grid.minor = element_blank(), 
@@ -77,8 +78,8 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
     scale_fill_manual(values = g_colours) +
     labs(y = "Mean rank (true positives)")) /
 (p +
-    geom_line(aes(y = Mean_risk, colour = Strategy), linewidth = 1.2) +
-    geom_ribbon(aes(ymin = Mean_risk_low, ymax = Mean_risk_high, fill = Strategy), alpha = 0.2) +
+    geom_line(aes(y = Mean_risk, colour = Method), linewidth = 1.2) +
+    geom_ribbon(aes(ymin = Mean_risk_low, ymax = Mean_risk_high, fill = Method), alpha = 0.2) +
     facet_wrap(vars(Prevalence), labeller = label_both) +
     theme_bw() +
     theme(panel.grid.minor = element_blank(), 
@@ -90,8 +91,8 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
     scale_fill_manual(values = g_colours) +
     labs(y = "Mean predicted risk (true positives")) /
 (p +
-  geom_line(aes(y = PPV_median, colour = Strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Strategy), alpha = 0.2) +
+  geom_line(aes(y = PPV_median, colour = Method), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Method), alpha = 0.2) +
   facet_wrap(vars(Prevalence), labeller = label_both) +
   theme_bw() +
   theme(panel.grid.minor = element_blank(), 
@@ -103,8 +104,8 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
   scale_fill_manual(values = g_colours) +
   labs(y = "Positive Predictive Value")) /
 (p +
-  geom_line(aes(y = Sens_median, colour = Strategy), linewidth = 1.2) +
-  geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high, fill = Strategy), alpha = 0.2) +
+  geom_line(aes(y = Sens_median, colour = Method), linewidth = 1.2) +
+  geom_ribbon(aes(ymin = Sens_low, ymax = Sens_high, fill = Method), alpha = 0.2) +
   facet_wrap(vars(Prevalence), labeller = label_both) +
   theme_bw() +
   labs(x = "Model AUC",

@@ -1,13 +1,16 @@
 # Helper function for ROC-based threshold
 # Obtain a cutpoint based on number needed to evaluate (NNE)
 # Equal to maximum tolerable number of false positives per true positive
-get_nne_threshold <- function(predictor, response, nne){
-  roc_curve = pROC::roc(predictor = predictor, response = response)
-  ppv = pROC::coords(roc_curve, x = "all", input = "threshold", ret = c("threshold", "ppv"))
-  ppv$nne = 1 / ppv$ppv
-  cutpoint = min(ppv$threshold[ppv$nne == nne], na.rm = T) |> suppressWarnings()
+get_nne_threshold <- function(predictor, response, nne) {
+  roc_curve <- pROC::roc(predictor = predictor, response = response)
+  ppv <- pROC::coords(
+    roc_curve,
+    x = "all", input = "threshold", ret = c("threshold", "ppv")
+  )
+  ppv$nne <- 1 / ppv$ppv
+  cutpoint <- ppv$threshold[which.min(abs(ppv$nne - nne))]
   
-  return(ifelse(is.infinite(cutpoint), 0, cutpoint))
+  if_else(is.infinite(cutpoint), 0, cutpoint)
 }
 
 # Main simulation function to repeat the analysis across different event rates, aucs, sample sizes
@@ -22,8 +25,8 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     wtp = wtp,
     # QALYs lost due to deterioration event
     qalys_lost = 0.03,
-    # Cost of an evaluation = (Clinician time cost * duration of MET) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
-    high_risk_group_treatment_cost = (1.50 * 19) + ((1 - 0.910) * (14345 * 0.85) * (1.03)^4 * event_rate),
+    # Cost of an evaluation = (Clinician time cost * duration of evaluation) + (Opportunity cost = chance of successful intervention * outcome cost * underlying p0)
+    high_risk_group_treatment_cost = (1.50 * 19) + ((1 - 0.910) * 14345 * event_rate),
     # Chance of successful intervention
     high_risk_group_treatment_effect = 1 - 0.910
   )
@@ -70,49 +73,56 @@ run_sims <- function(event_rate, auc, miscalibration, niter, n_test, n_eval, see
     test$predicted_calibrated = predict(fit, type = "response", newdata = test)
     
     # Induce miscalibration if specified
-    test = test |> mutate(predicted = case_when(
-      miscalibration == "underestimates" ~ predicted_calibrated^alpha,
-      miscalibration == "overestimates" ~ 1 - (1 - predicted_calibrated)^alpha,
-      .default = predicted_calibrated
-    ))
-
-    #FP = rgamma(1, shape = 110.314, scale = 0.172) * 3.19 + (event_rate * (1 - rnorm(1, 0.910, 0.036)) * rnorm(1, 14134, 686))
-    sample_youden = subset(test, predicted >= cutpoint_youden) |> slice_sample(n = n_eval)
-    sample_nmb = subset(test, predicted >= cutpoint_nmb) |> slice_sample(n = n_eval)
-    sample_nne = subset(test, predicted >= cutpoint_nne) |> slice_sample(n = n_eval)
-    sample_rank = test |> arrange(desc(predicted)) |> slice_head(n = n_eval)
-
-    results[[i]] <- tibble(
-      iter = i,
-      Strategy = c("Youden", "NMB", "NNE", "Rank"),
-      PPV = c(
-        sum(sample_youden$actual)/n_eval,
-        sum(sample_nmb$actual)/n_eval,
-        sum(sample_nne$actual)/n_eval,
-        sum(sample_rank$actual)/n_eval
-      ),
-      sensitivity = c(
-        sum(sample_youden$actual)/sum(test$actual),
-        sum(sample_nmb$actual)/sum(test$actual),
-        sum(sample_nne$actual)/sum(test$actual),
-        sum(sample_rank$actual)/sum(test$actual)
-      ),
-      Mean_rank = c(
-       mean(which(sample_youden$actual == 1)),
-       mean(which(sample_nmb$actual == 1)),
-       mean(which(sample_nne$actual == 1)),
-       mean(which(sample_rank$actual == 1))
-      ),
-      Mean_risk = c(
-        mean(sample_youden$predicted),
-        mean(sample_nmb$predicted),
-        mean(sample_nne$predicted),
-        mean(sample_rank$predicted)
-      ),
-      auc_model = auc,
-      Prevalence = event_rate,
-      Miscalibration = miscalibration
-    )
+    df_position <- test |> 
+      mutate(predicted = 
+               case_when(
+                 miscalibration == "underestimates" ~ predicted_calibrated^alpha,
+                 miscalibration == "overestimates" ~ 1 - (1 - predicted_calibrated)^alpha,
+                 .default = predicted_calibrated
+                 )
+             ) |>
+      # Arrange by rank
+      arrange(desc(predicted)) |>
+      mutate(
+        Youden_pos = predicted >= cutpoint_youden,
+        NMB_pos = predicted >= cutpoint_nmb,
+        NNE_pos = predicted >= cutpoint_nne,
+        Rank_pos = row_number() <= n_eval
+      ) |>
+      pivot_longer(
+        ends_with("pos"),
+        names_to = "Method",
+        values_to = "above_threshold",
+        names_transform = ~ str_remove(.x, "_pos")
+      )
+  
+    results[[i]] = df_position |>
+      filter(above_threshold) |>
+      group_by(Method) |>
+      mutate(
+        rank_rand = sample(1:n(), n(), replace = F)
+      ) |>
+      filter(
+        case_when(Method != "Rank" ~ rank_rand <= n_eval,
+        .default = above_threshold
+        )) |>
+      summarise(
+        ppv = sum(actual) / n(),
+        sensitivity = sum(actual) / sum(test$actual),
+        mean_rank = if (unique(Method) == "Rank") {
+          mean(row_number()[actual == 1])
+        } else {
+          mean(rank_rand[actual == 1])
+        },
+        mean_risk = mean(predicted_calibrated),
+        .groups = "drop"
+      ) |>
+      mutate(
+        auc_model = auc,
+        Prevalence = event_rate,
+        Miscalibration = miscalibration,
+        iter = i
+      )
   }
   return(bind_rows(results))
 }
@@ -134,58 +144,34 @@ run_serp <- function(niter, cutpoint, seed){
       (event_rate * (1 - rnorm(1, 0.910, 0.036)) * deterioration_cost) # opportunity cost
     FN = deterioration_cost
     df_sample = df_ed[sample(nrow(df_ed), 150),]
-    df_positive = subset(df_sample, pred_risk >= cutpoint) |> arrange(desc(pred_risk))
+    df_positive <- df_sample |>
+      filter(pred_risk >= cutpoint) |>
+      arrange(desc(pred_risk)) |>
+      mutate(rank = row_number(),
+             rank_random = sample(1:n(), n(), replace = FALSE),
+             top_25_ranked = ifelse(rank <= 0.25 * n(), TRUE, FALSE),
+             top_25_unranked = ifelse(rank_random <= 0.25 * n(), TRUE, FALSE),
+             top_50_ranked = ifelse(rank <= 0.5 * n(), TRUE, FALSE),
+             top_50_unranked = ifelse(rank_random <= 0.5 * n(), TRUE, FALSE),
+             top_75_ranked = ifelse(rank <= 0.75 * n(), TRUE, FALSE),
+             top_75_unranked = ifelse(rank_random <= 0.75 * n(), TRUE, FALSE)) |>
+      pivot_longer(
+        starts_with("top"),
+        names_to = "constraint",
+        values_to = "above_threshold",
+        names_transform = ~ str_remove(.x, "_limit")
+      ) |>
+      filter(above_threshold)
     
-    sample_25_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.25))
-    sample_50_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.50))
-    sample_75_rank = df_positive |> slice_head(n = floor(nrow(df_positive) * 0.75))
-    sample_25_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.25))
-    sample_50_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.50))
-    sample_75_threshold = df_positive |> slice_sample(n = floor(nrow(df_positive) * 0.75))
-    
-    results[[i]] <- tibble(
-      iter = i,
-      Strategy = c(rep("Ranked", 3), rep("Unranked", 3)),
-      Pct_evaluated = rep(c(25, 50, 75), 2),
-      PPV = c(
-        sum(sample_25_rank$outcome_died_30d)/nrow(sample_25_rank),
-        sum(sample_50_rank$outcome_died_30d)/nrow(sample_50_rank),
-        sum(sample_75_rank$outcome_died_30d)/nrow(sample_75_rank),
-        sum(sample_25_threshold$outcome_died_30d)/nrow(sample_25_threshold),
-        sum(sample_50_threshold$outcome_died_30d)/nrow(sample_50_threshold),
-        sum(sample_75_threshold$outcome_died_30d)/nrow(sample_75_threshold)
-      ),
-      Sensitivity = c(
-        sum(sample_25_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
-        sum(sample_50_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
-        sum(sample_75_rank$outcome_died_30d)/sum(df_sample$outcome_died_30d),
-        sum(sample_25_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
-        sum(sample_50_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d),
-        sum(sample_75_threshold$outcome_died_30d)/sum(df_sample$outcome_died_30d)
-      ),
-      FP_cost = c(
-        sum(sample_25_rank$outcome_died_30d == 0) * FP,
-        sum(sample_50_rank$outcome_died_30d == 0) * FP,
-        sum(sample_75_rank$outcome_died_30d == 0) * FP,
-        sum(sample_25_threshold$outcome_died_30d == 0) * FP,
-        sum(sample_50_threshold$outcome_died_30d == 0) * FP,
-        sum(sample_75_threshold$outcome_died_30d == 0) * FP
-      ),
-      Misclassification_cost = c(
-        sum(sample_25_rank$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_25_rank$outcome_died_30d == 1)) * FN,
-        sum(sample_50_rank$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_50_rank$outcome_died_30d == 1)) * FN,
-        sum(sample_75_rank$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_75_rank$outcome_died_30d == 1)) * FN,
-        sum(sample_25_threshold$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_25_threshold$outcome_died_30d == 1)) * FN,
-        sum(sample_50_threshold$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_50_threshold$outcome_died_30d == 1)) * FN,
-        sum(sample_75_threshold$outcome_died_30d == 0) * FP + 
-          (sum(df_sample$outcome_died_30d == 1) - sum(sample_75_threshold$outcome_died_30d == 1)) * FN
+    results[[i]] <- df_positive |>
+      summarise(
+        .by = constraint,
+        PPV = sum(outcome_died_30d)/n(),
+        Sensitivity = sum(outcome_died_30d)/sum(df_sample$outcome_died_30d),
+        FP_cost = sum(outcome_died_30d == 0) * FP[1],
+        Misclassification_cost = sum(outcome_died_30d == 0) * FP[1] +
+          (sum(df_sample$outcome_died_30d == 1) - sum(outcome_died_30d == 1)) * FN[1]
       )
-    )
   }
   
   return(bind_rows(results))
