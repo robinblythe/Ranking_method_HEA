@@ -45,11 +45,7 @@ df_summary <- bind_rows(results) |>
   group_by(Method, auc_model, Prevalence) |>
   summarise(
     Mean_rank = median(Mean_rank),
-    Mean_rank_low = quantile(Mean_rank, 0.25),
-    Mean_rank_high = quantile(Mean_rank, 0.75),
     Mean_risk = median(Mean_risk),
-    Mean_risk_low = quantile(Mean_risk, 0.25),
-    Mean_risk_high = quantile(Mean_risk, 0.75),
     PPV_median = median(ppv),
     PPV_low = quantile(ppv, 0.25),
     PPV_high = quantile(ppv, 0.75),
@@ -65,7 +61,6 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
 
 (p +
     geom_line(aes(y = Mean_rank, colour = Method), linewidth = 1.2) +
-    geom_ribbon(aes(ymin = Mean_rank_low, ymax = Mean_rank_high, fill = Method), alpha = 0.2) +
     facet_wrap(vars(Prevalence), labeller = label_both) +
     theme_bw() +
     theme(panel.grid.minor = element_blank(), 
@@ -79,7 +74,6 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
     labs(y = "Mean rank (true positives)")) /
 (p +
     geom_line(aes(y = Mean_risk, colour = Method), linewidth = 1.2) +
-    geom_ribbon(aes(ymin = Mean_risk_low, ymax = Mean_risk_high, fill = Method), alpha = 0.2) +
     facet_wrap(vars(Prevalence), labeller = label_both) +
     theme_bw() +
     theme(panel.grid.minor = element_blank(), 
