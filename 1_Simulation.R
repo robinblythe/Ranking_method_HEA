@@ -34,7 +34,7 @@ results <- future_map(1:nrow(combs), function(i){
 }, .options = furrr_options(seed = TRUE)
 )
 
-saveRDS(results, file = "sim_results.RDS")
+saveRDS(results, file = "sim_results.rds")
 
 # Miscalibration is explored in the sensitivity analysis
 df_summary <- bind_rows(results) |>

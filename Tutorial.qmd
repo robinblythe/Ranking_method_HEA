@@ -427,7 +427,7 @@ A bootstrap simply takes samples (in this case, without replacement) from the ma
 The df_ed object is the emergency department dataset at Singapore General Hospital. If you are interested in gaining access to these data, you can contact Duke-NUS and enquire after the ED2A dataset.
 
 ```{r, echo = FALSE}
-df_ed <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+df_ed <- readRDS("filepath")
 ```
 
 ```{r}

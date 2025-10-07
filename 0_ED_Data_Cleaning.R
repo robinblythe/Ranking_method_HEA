@@ -3,7 +3,7 @@ options(scipen = 100, digits = 5)
 library(tidyverse)
 
 # Import data
-df_ed_raw <- readRDS("C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/data_all_temp2022.11.18.RDS")
+df_ed_raw <- readRDS("filepath")
 
 df_ed <- df_ed_raw |>
   filter(REGISTRATION_DATE >= "2017-01-01") |>
@@ -53,6 +53,6 @@ df_ed <- df_ed_raw |>
   ungroup() |>
   na.omit()
 
-saveRDS(df_ed, file = "C:/Users/Robin/NUS Dropbox/EDData/ED2A/ED2A_Blythe Robin Daniel/dat_scored.RDS")
+saveRDS(df_ed, file = "filepath")
 remove(df_ed_raw)
 
