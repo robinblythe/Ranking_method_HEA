@@ -83,7 +83,7 @@ g_colours <- c("#D55E00", "#56B4E9", "#009E73", "#F0E442")
     scale_x_continuous(limits = c(0.65, 0.95), breaks = seq(0.65, 0.95, 0.1)) +
     scale_colour_manual(values = g_colours) +
     scale_fill_manual(values = g_colours) +
-    labs(y = "Mean predicted risk (true positives")) /
+    labs(y = "Mean predicted risk (true positives)")) /
 (p +
   geom_line(aes(y = PPV_median, colour = Method), linewidth = 1.2) +
   geom_ribbon(aes(ymin = PPV_low, ymax = PPV_high, fill = Method), alpha = 0.2) +
